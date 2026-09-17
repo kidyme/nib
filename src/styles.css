@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   配色系统
+   ---------------------------------------------------------------------------
+   规则：组件只引用语义 token（bg-surface / text-ink-muted / border-line ...），
+        永远不写死色值，也不要用 Tailwind 默认调色板（已被下面的
+        `--color-*: initial` 清空）。
+
+   加一套新配色 = 在文件底部加一个 [data-theme="id"] 块填满全部 token，
+   再去 theme.ts 的 THEMES 里加一行。组件一行都不用改。
+   =========================================================================== */
+
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+
+  /* 表面 —— 从最底到最上层 */
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-sunken: var(--c-sunken);
+  --color-sidebar: var(--c-sidebar);
+  --color-overlay: var(--c-overlay);
+
+  /* 描边 */
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+
+  /* 文字 */
+  --color-ink: var(--c-ink);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-ink-subtle: var(--c-ink-subtle);
+  --color-ink-inverse: var(--c-ink-inverse);
+
+  /* 主色与交互态 */
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-active: var(--c-accent-active);
+  --color-accent-fg: var(--c-accent-fg);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-ring: var(--c-ring);
+
+  /* 状态 */
+  --color-success: var(--c-success);
+  --color-success-soft: var(--c-success-soft);
+  --color-warning: var(--c-warning);
+  --color-warning-soft: var(--c-warning-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-info: var(--c-info);
+  --color-info-soft: var(--c-info-soft);
+
+  /* 杂项 */
+  --color-scrollbar: var(--c-scrollbar);
+  --color-scrollbar-hover: var(--c-scrollbar-hover);
+}
+
+/* ---------------------------------------------------------------------------
+   预设：深色
+   --------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-canvas: #0e1014;
+  --c-surface: #16181d;
+  --c-raised: #1e2128;
+  --c-sunken: #0a0b0e;
+  --c-sidebar: #121419;
+  --c-overlay: rgb(0 0 0 / 0.55);
+
+  --c-line: #262a32;
+  --c-line-strong: #3a414b;
+
+  --c-ink: #e9ebef;
+  --c-ink-muted: #99a1ae;
+  --c-ink-subtle: #6b7381;
+  --c-ink-inverse: #0e1014;
+
+  --c-accent: #4f8cff;
+  --c-accent-hover: #6d9fff;
+  --c-accent-active: #3d78e8;
+  --c-accent-fg: #ffffff;
+  --c-accent-soft: rgb(79 140 255 / 0.15);
+  --c-ring: rgb(79 140 255 / 0.55);
+
+  --c-success: #3ecf8e;
+  --c-success-soft: rgb(62 207 142 / 0.15);
+  --c-warning: #e5a94a;
+  --c-warning-soft: rgb(229 169 74 / 0.15);
+  --c-danger: #f0616d;
+  --c-danger-soft: rgb(240 97 109 / 0.15);
+  --c-info: #4f8cff;
+  --c-info-soft: rgb(79 140 255 / 0.15);
+
+  --c-scrollbar: #2e343d;
+  --c-scrollbar-hover: #414954;
+}
+
+/* ---------------------------------------------------------------------------
+   预设：浅色
+   --------------------------------------------------------------------------- */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --c-canvas: #f5f6f8;
+  --c-surface: #ffffff;
+  --c-raised: #ffffff;
+  --c-sunken: #eceef2;
+  --c-sidebar: #eaecf1;
+  --c-overlay: rgb(28 32 40 / 0.35);
+
+  --c-line: #e1e4ea;
+  --c-line-strong: #c6ccd6;
+
+  --c-ink: #191c21;
+  --c-ink-muted: #5b626e;
+  --c-ink-subtle: #8a919d;
+  --c-ink-inverse: #ffffff;
+
+  --c-accent: #2f6fe4;
+  --c-accent-hover: #1f5fd6;
+  --c-accent-active: #1a51bd;
+  --c-accent-fg: #ffffff;
+  --c-accent-soft: rgb(47 111 228 / 0.10);
+  --c-ring: rgb(47 111 228 / 0.45);
+
+  --c-success: #157f56;
+  --c-success-soft: rgb(21 127 86 / 0.10);
+  --c-warning: #a86a08;
+  --c-warning-soft: rgb(168 106 8 / 0.10);
+  --c-danger: #c8353f;
+  --c-danger-soft: rgb(200 53 63 / 0.10);
+  --c-info: #2f6fe4;
+  --c-info-soft: rgb(47 111 228 / 0.10);
+
+  --c-scrollbar: #c6ccd6;
+  --c-scrollbar-hover: #a9b1bd;
+}
+
+/* ===========================================================================
+   基础样式
+   =========================================================================== */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--c-canvas);
+    color: var(--c-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* 桌面应用：默认不选中文本，输入控件与显式 .select-text 除外 */
+    user-select: none;
+    overscroll-behavior: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  .select-text {
+    user-select: text;
+  }
+
+  ::selection {
+    background-color: var(--c-accent-soft);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--c-scrollbar);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--c-scrollbar-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-ring);
+    outline-offset: 1px;
+  }
+}
