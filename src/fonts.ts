@@ -9,6 +9,9 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type FontRole = "ui" | "content";
 
+/** 默认字体：不是某个具体字体族，交给系统挑，所以单独当一项列。 */
+export const SYSTEM_FAMILY = "system-ui";
+
 export type FontSetting = {
   family: string;
   size: number;
@@ -69,13 +72,13 @@ export function readFontSettings(): FontSettings {
 
   return {
     ui: {
-      family: read("ui", "family") || "system-ui",
+      family: read("ui", "family") || SYSTEM_FAMILY,
       size: size("ui"),
       weight: weight("ui"),
       leading: 1.5,
     },
     content: {
-      family: read("content", "family") || "system-ui",
+      family: read("content", "family") || SYSTEM_FAMILY,
       size: size("content"),
       weight: weight("content"),
       leading: parseFloat(style.getPropertyValue("--f-content-leading")) || 1.65,

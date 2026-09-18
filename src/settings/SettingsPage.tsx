@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
+  SYSTEM_FAMILY,
   loadFontFamilies,
   normalizeFonts,
   type FontRole,
@@ -179,42 +180,50 @@ function FontsPage({
       <Section title="内容字体">
         <FontRows
           value={fonts.content}
+          families={families}
           withLeading
           onChange={(patch) => onChangeFont("content", patch)}
         />
       </Section>
       <Section title="系统字体">
-        <FontRows value={fonts.ui} onChange={(patch) => onChangeFont("ui", patch)} />
+        <FontRows
+          value={fonts.ui}
+          families={families}
+          onChange={(patch) => onChangeFont("ui", patch)}
+        />
       </Section>
-
-      <datalist id="nib-font-families">
-        {families.map((family) => (
-          <option key={family} value={family} />
-        ))}
-      </datalist>
     </>
   );
 }
 
 function FontRows({
   value,
+  families,
   withLeading,
   onChange,
 }: {
   value: FontSetting;
+  families: string[];
   withLeading?: boolean;
   onChange: (patch: Partial<FontSetting>) => void;
 }) {
+  // 第一项固定是「系统默认」；存过的字体名可能不在系统列表里，补进去免得选不回来。
+  const options = [...new Set([SYSTEM_FAMILY, ...families, value.family])];
+
   return (
     <>
-      <Row label="字体" hint="从本机已安装字体里挑，也可以直接输入">
-        <input
-          list="nib-font-families"
+      <Row label="字体" hint="本机已安装的字体">
+        <select
           value={value.family}
-          spellCheck={false}
           onChange={(event) => onChange({ family: event.target.value })}
-          className={`${CONTROL} w-[220px]`}
-        />
+          className={`${CONTROL} w-[240px]`}
+        >
+          {options.map((family) => (
+            <option key={family} value={family}>
+              {family === SYSTEM_FAMILY ? "系统默认" : family}
+            </option>
+          ))}
+        </select>
       </Row>
       <Row label="字号">
         <input
