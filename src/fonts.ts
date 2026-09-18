@@ -37,6 +37,12 @@ export const FONT_FAMILIES = [
   "SF Mono",
 ];
 
+/** 出厂默认，跟 styles.css 的 :root 保持一致；「恢复默认配置」用的就是这一份。 */
+export const DEFAULT_FONTS: FontSettings = {
+  ui: { family: SYSTEM_FAMILY, size: 14, weight: 400, leading: 1.5 },
+  content: { family: SYSTEM_FAMILY, size: 15, weight: 400, leading: 1.65 },
+};
+
 export const FONT_WEIGHTS = [
   { value: 300, label: "细体" },
   { value: 400, label: "常规" },
@@ -68,21 +74,24 @@ export function readFontSettings(): FontSettings {
   const read = (role: FontRole, key: "family" | "size" | "weight") =>
     style.getPropertyValue(varName(role, key)).trim();
 
-  const size = (role: FontRole) => parseFloat(read(role, "size")) || 14;
-  const weight = (role: FontRole) => parseInt(read(role, "weight"), 10) || 400;
+  const size = (role: FontRole) => parseFloat(read(role, "size")) || DEFAULT_FONTS[role].size;
+  const weight = (role: FontRole) =>
+    parseInt(read(role, "weight"), 10) || DEFAULT_FONTS[role].weight;
 
   return {
     ui: {
-      family: read("ui", "family") || SYSTEM_FAMILY,
+      family: read("ui", "family") || DEFAULT_FONTS.ui.family,
       size: size("ui"),
       weight: weight("ui"),
-      leading: 1.5,
+      leading: DEFAULT_FONTS.ui.leading,
     },
     content: {
-      family: read("content", "family") || SYSTEM_FAMILY,
+      family: read("content", "family") || DEFAULT_FONTS.content.family,
       size: size("content"),
       weight: weight("content"),
-      leading: parseFloat(style.getPropertyValue("--f-content-leading")) || 1.65,
+      leading:
+        parseFloat(style.getPropertyValue("--f-content-leading")) ||
+        DEFAULT_FONTS.content.leading,
     },
   };
 }

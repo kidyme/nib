@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  DEFAULT_FONTS,
   FONT_FAMILIES,
   FONT_WEIGHTS,
   SYSTEM_FAMILY,
@@ -23,6 +24,7 @@ import {
 } from "../fonts";
 import {
   COLOR_TOKENS,
+  DEFAULT_THEME,
   THEMES,
   applyTheme,
   isThemeId,
@@ -84,7 +86,8 @@ export function SettingsPage({ theme, fonts, onBack, onSave }: SettingsPageProps
   const saved: Config = { theme, fonts };
   // 草稿：改了立刻写 DOM 预览效果，但没落盘，返回就没了。
   const [draft, setDraft] = useState<Config>(saved);
-  const dirty = draft.theme !== theme || draft.fonts !== fonts;
+  // 比内容不比引用：色值改回原样、恢复默认后本来就等于存的那份，都不算改动。
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   useEffect(() => {
     applyTheme(draft.theme);
@@ -96,6 +99,10 @@ export function SettingsPage({ theme, fonts, onBack, onSave }: SettingsPageProps
 
   const changeColors = (colors: ThemeColors) =>
     setDraft((current) => ({ ...current, theme: { ...current.theme, colors } }));
+
+  /** 恢复默认配置：只改草稿，照样得点保存，点错了「还原」还能退回来。 */
+  const resetToDefaults = () =>
+    setDraft({ theme: presetTheme(DEFAULT_THEME), fonts: DEFAULT_FONTS });
 
   const changeFont = (role: FontRole, patch: Partial<FontSetting>) =>
     setDraft((current) => ({
@@ -136,6 +143,10 @@ export function SettingsPage({ theme, fonts, onBack, onSave }: SettingsPageProps
             {/* 拖动区只占左边，右边留给按钮（按钮会自己挡住拖动） */}
             <div className="h-full flex-1" {...TITLEBAR_DRAG} />
             {dirty && <span className="pr-1 text-ui-sm text-ink-subtle">有未保存的改动</span>}
+            <button type="button" onClick={resetToDefaults} className={SECONDARY_BUTTON}>
+              恢复默认配置
+            </button>
+            <span className="h-4 w-px bg-line" />
             <button
               type="button"
               onClick={() => setDraft(saved)}

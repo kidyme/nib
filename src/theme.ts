@@ -65,7 +65,8 @@ export type ThemeState = {
 };
 
 const STORAGE_KEY = "nib:theme";
-const DEFAULT_THEME: ThemeId = "everforest";
+/** 出厂预设，「恢复默认配置」也用这一套。 */
+export const DEFAULT_THEME: ThemeId = "everforest";
 
 /** 老预设 id：认出来就换成同色系的新预设，别让旧色值留在新预设上。 */
 const LEGACY_THEME_IDS: Record<string, ThemeId | undefined> = {
