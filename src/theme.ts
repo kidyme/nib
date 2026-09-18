@@ -14,8 +14,8 @@
 export type ThemeMode = "light" | "dark";
 
 export const THEMES = [
-  { id: "dark", label: "深色", mode: "dark" },
-  { id: "light", label: "浅色", mode: "light" },
+  { id: "everforest", label: "深色 · Everforest", mode: "dark" },
+  { id: "github", label: "浅色 · GitHub", mode: "light" },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -65,7 +65,13 @@ export type ThemeState = {
 };
 
 const STORAGE_KEY = "nib:theme";
-const DEFAULT_THEME: ThemeId = "dark";
+const DEFAULT_THEME: ThemeId = "everforest";
+
+/** 老预设 id：认出来就换成同色系的新预设，别让旧色值留在新预设上。 */
+const LEGACY_THEME_IDS: Record<string, ThemeId | undefined> = {
+  dark: "everforest",
+  light: "github",
+};
 
 /** accentHover -> --c-accent-hover */
 function cssVar(id: ColorTokenId): string {
@@ -85,10 +91,11 @@ function readStored(): { base: ThemeId; colors: Partial<ThemeColors> } {
     const raw: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     if (raw && typeof raw === "object") {
       const stored = raw as { base?: unknown; colors?: unknown };
-      return {
-        base: isThemeId(stored.base) ? stored.base : DEFAULT_THEME,
-        colors: normalizeColors(stored.colors) ?? {},
-      };
+      if (isThemeId(stored.base)) {
+        return { base: stored.base, colors: normalizeColors(stored.colors) ?? {} };
+      }
+      const legacy = typeof stored.base === "string" ? LEGACY_THEME_IDS[stored.base] : undefined;
+      return { base: legacy ?? DEFAULT_THEME, colors: {} };
     }
   } catch {
     // 存的东西坏了就当没存过，用默认预设。

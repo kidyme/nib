@@ -61,32 +61,32 @@ export default function App() {
   const activeApp = findApp(activeAppId);
   const ActiveApp = activeApp.component;
 
+  // 设置是独立页面：整窗换掉外壳，不再套 AppShell。
+  if (settingsOpen) {
+    return (
+      <SettingsPage
+        theme={theme}
+        fonts={fonts}
+        onBack={() => setSettingsOpen(false)}
+        onSelectPreset={(id: ThemeId) => setTheme(presetTheme(id))}
+        onChangeColors={(colors: ThemeColors) => setTheme((current) => ({ ...current, colors }))}
+        onChangeFont={changeFont}
+        onImport={(next) => {
+          setTheme(next.theme);
+          setFonts(next.fonts);
+        }}
+      />
+    );
+  }
+
   return (
     <AppShell
       apps={APPS}
       activeApp={activeApp}
-      settingsOpen={settingsOpen}
-      onSelectApp={(id) => {
-        setSettingsOpen(false);
-        setActiveAppId(id);
-      }}
+      onSelectApp={(id) => setActiveAppId(id)}
       onOpenSettings={() => setSettingsOpen(true)}
     >
-      {settingsOpen ? (
-        <SettingsPage
-          theme={theme}
-          fonts={fonts}
-          onSelectPreset={(id: ThemeId) => setTheme(presetTheme(id))}
-          onChangeColors={(colors: ThemeColors) => setTheme((current) => ({ ...current, colors }))}
-          onChangeFont={changeFont}
-          onImport={(next) => {
-            setTheme(next.theme);
-            setFonts(next.fonts);
-          }}
-        />
-      ) : (
-        <ActiveApp />
-      )}
+      <ActiveApp />
     </AppShell>
   );
 }

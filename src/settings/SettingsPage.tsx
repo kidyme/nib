@@ -1,4 +1,11 @@
-import { useRef, useState, type ReactNode } from "react";
+/**
+ * 设置页。
+ *
+ * 打开时整窗换掉应用外壳：左边是设置导航，右边是设置内容。
+ * 排版照 Codex 那套走——小节标题 + 一张圆角卡片，卡片里一行一个设置项，
+ * 行首是名称和说明，行尾是控件。
+ */
+import { Fragment, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
@@ -16,167 +23,233 @@ import {
   type ThemeId,
   type ThemeState,
 } from "../theme";
-import { CheckIcon } from "../shell/icons";
+import {
+  ArrowLeftIcon,
+  BracesIcon,
+  CheckIcon,
+  PaletteIcon,
+  TypeIcon,
+} from "../shell/icons";
 
 type SettingsPageProps = {
   theme: ThemeState;
   fonts: FontSettings;
+  onBack: () => void;
   onSelectPreset: (id: ThemeId) => void;
   onChangeColors: (colors: ThemeColors) => void;
   onChangeFont: (role: FontRole, patch: Partial<FontSetting>) => void;
   onImport: (next: { theme: ThemeState; fonts: FontSettings }) => void;
 };
 
+const PAGE_GROUPS = [
+  {
+    group: "个人",
+    items: [
+      { id: "fonts", label: "字体", icon: TypeIcon },
+      { id: "theme", label: "外观", icon: PaletteIcon },
+    ],
+  },
+  {
+    group: "配置",
+    items: [{ id: "data", label: "数据", icon: BracesIcon }],
+  },
+] as const;
+
+type PageId = (typeof PAGE_GROUPS)[number]["items"][number]["id"];
+
+const PAGE_TITLES: Record<PageId, string> = {
+  fonts: "字体",
+  theme: "外观",
+  data: "数据",
+};
+
+/** 顶部留白兼作窗口拖动区，macOS 的红绿灯按钮浮在这块空白上。 */
+const TITLEBAR_DRAG = { "data-tauri-drag-region": true } as const;
+
 const COLOR_GROUPS = [...new Set(COLOR_TOKENS.map((token) => token.group))];
 
 export function SettingsPage({
   theme,
   fonts,
+  onBack,
   onSelectPreset,
   onChangeColors,
   onChangeFont,
   onImport,
 }: SettingsPageProps) {
+  const [page, setPage] = useState<PageId>("fonts");
+
   return (
-    <div className="mx-auto max-w-[720px] space-y-8 px-8 py-7">
-      <FontSection
-        title="内容字体"
-        hint="TODO、文档正文这些你自己读的内容"
-        value={fonts.content}
-        withLeading
-        onChange={(patch) => onChangeFont("content", patch)}
-      />
-      <FontSection
-        title="系统字体"
-        hint="侧边栏、标题栏、设置界面这些外壳"
-        value={fonts.ui}
-        onChange={(patch) => onChangeFont("ui", patch)}
-      />
-      <ColorSection
-        theme={theme}
-        onSelectPreset={onSelectPreset}
-        onChangeColors={onChangeColors}
-      />
-      <ConfigSection theme={theme} fonts={fonts} onImport={onImport} />
+    <div className="flex h-full bg-canvas">
+      <aside className="flex w-[220px] shrink-0 flex-col">
+        <div className="h-12 shrink-0" {...TITLEBAR_DRAG} />
+        <div className="px-2.5">
+          <NavItem icon={ArrowLeftIcon} label="返回应用" onClick={onBack} />
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-2.5 pt-3">
+          {PAGE_GROUPS.map((group) => (
+            <div key={group.group} className="pt-4 first:pt-0">
+              <h2 className="px-2.5 pb-1 text-ui-sm text-ink-subtle">{group.group}</h2>
+              {group.items.map((item) => (
+                <NavItem
+                  key={item.id}
+                  icon={item.icon}
+                  label={item.label}
+                  active={page === item.id}
+                  onClick={() => setPage(item.id)}
+                />
+              ))}
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="h-12 shrink-0" {...TITLEBAR_DRAG} />
+        <div className="mx-auto max-w-[640px] px-8 pb-24">
+          <h1 className="pb-6 text-ui-xl font-medium text-ink">{PAGE_TITLES[page]}</h1>
+          {page === "fonts" && <FontsPage fonts={fonts} onChangeFont={onChangeFont} />}
+          {page === "theme" && (
+            <ThemePage
+              theme={theme}
+              onSelectPreset={onSelectPreset}
+              onChangeColors={onChangeColors}
+            />
+          )}
+          {page === "data" && <DataPage theme={theme} fonts={fonts} onImport={onImport} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function NavItem({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors duration-100",
+        active ? "bg-accent-soft font-medium text-accent" : "text-ink-muted hover:bg-raised hover:text-ink",
+      ].join(" ")}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="pb-7">
+      <h2 className="pb-2 text-ui-sm font-medium text-ink-muted">{title}</h2>
+      <div className="overflow-hidden rounded-xl bg-raised">{children}</div>
+    </section>
+  );
+}
+
+function FontsPage({
+  fonts,
+  onChangeFont,
+}: {
+  fonts: FontSettings;
+  onChangeFont: SettingsPageProps["onChangeFont"];
+}) {
+  return (
+    <>
+      <Section title="内容字体">
+        <FontRows
+          value={fonts.content}
+          withLeading
+          onChange={(patch) => onChangeFont("content", patch)}
+        />
+      </Section>
+      <Section title="系统字体">
+        <FontRows value={fonts.ui} onChange={(patch) => onChangeFont("ui", patch)} />
+      </Section>
 
       <datalist id="nib-font-families">
         {FONT_FAMILIES.map((family) => (
           <option key={family} value={family} />
         ))}
       </datalist>
-    </div>
+    </>
   );
 }
 
-function Section({
-  title,
-  hint,
-  action,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-end justify-between gap-4">
-        <div className="space-y-0.5">
-          <h2 className="text-ui-lg font-medium text-ink">{title}</h2>
-          {hint && <p className="text-ui-sm text-ink-subtle">{hint}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function FontSection({
-  title,
-  hint,
+function FontRows({
   value,
   withLeading,
   onChange,
 }: {
-  title: string;
-  hint: string;
   value: FontSetting;
   withLeading?: boolean;
   onChange: (patch: Partial<FontSetting>) => void;
 }) {
-  const columns = withLeading
-    ? "grid-cols-[minmax(0,1fr)_84px_104px_84px]"
-    : "grid-cols-[minmax(0,1fr)_84px_104px]";
-
   return (
-    <Section title={title} hint={hint}>
-      <div className={`grid gap-3 rounded-lg border border-line bg-surface p-3.5 ${columns}`}>
-        <Field label="字体">
-          <input
-            list="nib-font-families"
-            value={value.family}
-            spellCheck={false}
-            onChange={(event) => onChange({ family: event.target.value })}
-            className={INPUT}
-          />
-        </Field>
-
-        <Field label="字号">
+    <>
+      <Row label="字体" hint="直接输入字体名，或从常用字体里挑">
+        <input
+          list="nib-font-families"
+          value={value.family}
+          spellCheck={false}
+          onChange={(event) => onChange({ family: event.target.value })}
+          className={`${CONTROL} w-[200px]`}
+        />
+      </Row>
+      <Row label="字号">
+        <input
+          type="number"
+          min={9}
+          max={32}
+          step={1}
+          value={value.size}
+          onChange={(event) => changeNumber(event, (size) => onChange({ size }))}
+          className={`${CONTROL} w-[76px] text-right`}
+        />
+      </Row>
+      <Row label="字重">
+        <select
+          value={value.weight}
+          onChange={(event) => onChange({ weight: Number(event.target.value) })}
+          className={`${CONTROL} w-[132px]`}
+        >
+          {FONT_WEIGHTS.map((weight) => (
+            <option key={weight.value} value={weight.value}>
+              {weight.label} {weight.value}
+            </option>
+          ))}
+        </select>
+      </Row>
+      {withLeading && (
+        <Row label="行高">
           <input
             type="number"
-            min={9}
-            max={32}
-            step={1}
-            value={value.size}
-            onChange={(event) => changeNumber(event, (size) => onChange({ size }))}
-            className={INPUT}
+            min={1}
+            max={3}
+            step={0.05}
+            value={value.leading}
+            onChange={(event) => changeNumber(event, (leading) => onChange({ leading }))}
+            className={`${CONTROL} w-[76px] text-right`}
           />
-        </Field>
-
-        <Field label="字重">
-          <select
-            value={value.weight}
-            onChange={(event) => onChange({ weight: Number(event.target.value) })}
-            className={INPUT}
-          >
-            {FONT_WEIGHTS.map((weight) => (
-              <option key={weight.value} value={weight.value}>
-                {weight.label} {weight.value}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        {withLeading && (
-          <Field label="行高">
-            <input
-              type="number"
-              min={1}
-              max={3}
-              step={0.05}
-              value={value.leading}
-              onChange={(event) => changeNumber(event, (leading) => onChange({ leading }))}
-              className={INPUT}
-            />
-          </Field>
-        )}
-      </div>
-    </Section>
+        </Row>
+      )}
+    </>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="space-y-1">
-      <span className="block text-ui-sm text-ink-subtle">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function ColorSection({
+function ThemePage({
   theme,
   onSelectPreset,
   onChangeColors,
@@ -186,68 +259,53 @@ function ColorSection({
   onChangeColors: (colors: ThemeColors) => void;
 }) {
   return (
-    <Section
-      title="配色"
-      hint="预设提供基础，逐项改过就是你自己的一套"
-      action={
-        <button
-          type="button"
-          onClick={() => onSelectPreset(theme.base)}
-          className={BUTTON}
-        >
-          恢复预设
-        </button>
-      }
-    >
-      <div className="overflow-hidden rounded-lg border border-line">
-        {THEMES.map((preset, index) => {
+    <>
+      <Section title="预设">
+        {THEMES.map((preset) => {
           const active = preset.id === theme.base;
           return (
             <button
               key={preset.id}
               type="button"
               onClick={() => onSelectPreset(preset.id)}
-              className={[
-                "flex w-full items-center gap-3 px-3 py-2.5 text-left text-ui transition-colors",
-                index > 0 ? "border-t border-line" : "",
-                active ? "bg-accent-soft text-accent" : "text-ink hover:bg-sunken",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              className={ROW}
             >
               <span
                 data-theme={preset.id}
                 className="flex h-5 w-8 shrink-0 overflow-hidden rounded-[5px] ring-1 ring-line"
               >
-                <span className="flex-1 bg-surface" />
                 <span className="flex-1 bg-canvas" />
+                <span className="flex-1 bg-raised" />
                 <span className="w-2.5 bg-accent" />
               </span>
-              <span className="flex-1 truncate">{preset.label}</span>
-              {active && <CheckIcon className="size-4 shrink-0" />}
+              <span className="min-w-0 flex-1 truncate text-ui text-ink">{preset.label}</span>
+              {active && <CheckIcon className="size-4 shrink-0 text-accent" />}
             </button>
           );
         })}
-      </div>
+        <Row label="恢复预设" hint="把手改过的色值退回当前预设">
+          <button type="button" onClick={() => onSelectPreset(theme.base)} className={BUTTON}>
+            恢复
+          </button>
+        </Row>
+      </Section>
 
-      <div className="space-y-3 pt-1">
+      <Section title="配色">
         {COLOR_GROUPS.map((group) => (
-          <div key={group} className="space-y-1.5">
-            <h3 className="text-ui-sm text-ink-subtle">{group}</h3>
-            <div className="grid grid-cols-2 gap-1.5">
-              {COLOR_TOKENS.filter((token) => token.group === group).map((token) => (
-                <ColorRow
-                  key={token.id}
-                  label={token.label}
-                  value={theme.colors[token.id]}
-                  onChange={(value) => onChangeColors({ ...theme.colors, [token.id]: value })}
-                />
-              ))}
-            </div>
-          </div>
+          <Fragment key={group}>
+            <div className={GROUP_HEAD}>{group}</div>
+            {COLOR_TOKENS.filter((token) => token.group === group).map((token) => (
+              <ColorRow
+                key={token.id}
+                label={token.label}
+                value={theme.colors[token.id]}
+                onChange={(value) => onChangeColors({ ...theme.colors, [token.id]: value })}
+              />
+            ))}
+          </Fragment>
         ))}
-      </div>
-    </Section>
+      </Section>
+    </>
   );
 }
 
@@ -276,7 +334,8 @@ function ColorRow({
   };
 
   return (
-    <div className="flex items-center gap-2 rounded-md border border-line bg-surface px-2 py-1.5">
+    <div className={ROW}>
+      <span className="min-w-0 flex-1 truncate text-ui text-ink">{label}</span>
       <input
         type="color"
         value={value}
@@ -284,7 +343,6 @@ function ColorRow({
         onChange={(event) => onChange(event.target.value)}
         className="color-input size-5 shrink-0"
       />
-      <span className="min-w-0 flex-1 truncate text-ui-sm text-ink-muted">{label}</span>
       <input
         value={draft}
         spellCheck={false}
@@ -295,20 +353,20 @@ function ColorRow({
           if (event.key === "Enter") commit();
           if (event.key === "Escape") setDraft(value);
         }}
-        className="w-[70px] shrink-0 bg-transparent text-right font-mono text-ui-xs text-ink-subtle outline-none"
+        className={HEX_INPUT}
       />
     </div>
   );
 }
 
-function ConfigSection({
+function DataPage({
   theme,
   fonts,
   onImport,
 }: {
   theme: ThemeState;
   fonts: FontSettings;
-  onImport: (next: { theme: ThemeState; fonts: FontSettings }) => void;
+  onImport: SettingsPageProps["onImport"];
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
@@ -352,49 +410,84 @@ function ConfigSection({
   };
 
   return (
-    <Section title="配置" hint="整份配置就是一个 JSON，配色和字体都在里面">
-      <textarea
-        ref={textareaRef}
-        readOnly
-        value={json}
-        spellCheck={false}
-        className="h-48 w-full resize-none rounded-lg border border-line bg-sunken p-3 font-mono text-ui-xs text-ink-muted outline-none"
-      />
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={copy} className={BUTTON}>
-          复制
-        </button>
-        <button type="button" onClick={download} className={BUTTON}>
-          导出 JSON
-        </button>
-        <label className={BUTTON}>
-          导入 JSON
-          <input
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void importFile(file);
-            }}
-          />
-        </label>
+    <Section title="配置文件">
+      <Row label="整份配置" hint="配色和字体都在这个 JSON 里">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={copy} className={BUTTON}>
+            复制
+          </button>
+          <button type="button" onClick={download} className={BUTTON}>
+            导出
+          </button>
+          <label className={BUTTON}>
+            导入
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importFile(file);
+              }}
+            />
+          </label>
+        </div>
+      </Row>
+      <div className="border-t border-line p-3.5">
+        <textarea
+          ref={textareaRef}
+          readOnly
+          value={json}
+          spellCheck={false}
+          className="h-64 w-full resize-none rounded-lg border border-line bg-canvas p-3 font-mono text-ui-sm text-ink-muted outline-none"
+        />
         {status && (
-          <span className={`text-ui-sm ${status.error ? "text-danger" : "text-ink-subtle"}`}>
+          <p className={`pt-2 text-ui-sm ${status.error ? "text-danger" : "text-ink-subtle"}`}>
             {status.text}
-          </span>
+          </p>
         )}
       </div>
     </Section>
   );
 }
 
-const INPUT =
-  "w-full rounded-md border border-line bg-canvas px-2.5 py-1.5 text-ui text-ink outline-none focus:border-accent";
+/** 卡片里的一行：左边名称 + 说明，右边控件。分隔线靠首行豁免拼出来。 */
+const ROW =
+  "flex w-full items-center gap-4 border-t border-line px-3.5 py-2.5 text-left first:border-t-0";
+
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={ROW}>
+      <div className="min-w-0 flex-1">
+        <div className="text-ui text-ink">{label}</div>
+        {hint && <div className="text-ui-sm text-ink-subtle">{hint}</div>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2.5">{children}</div>
+    </div>
+  );
+}
+
+const CONTROL =
+  "rounded-md border border-line bg-canvas px-2.5 py-1 text-ui text-ink outline-none focus:border-accent";
+
+const HEX_INPUT =
+  "w-[92px] rounded-md border border-line bg-canvas px-2.5 py-1 text-right font-mono text-ui-sm text-ink-muted outline-none focus:border-accent";
+
+/** 分组的小标题也是一行，所以照样要画分隔线（首行除外）。 */
+const GROUP_HEAD =
+  "border-t border-line px-3.5 py-1.5 text-ui-sm text-ink-subtle first:border-t-0";
 
 const BUTTON =
-  "cursor-pointer rounded-md border border-line bg-surface px-2.5 py-1.5 text-ui-sm text-ink-muted transition-colors hover:bg-sunken hover:text-ink";
+  "rounded-md border border-line bg-canvas px-2.5 py-1 text-ui-sm text-ink-muted transition-colors hover:bg-sunken hover:text-ink";
 
 /** 数字输入允许先清空再输入，空值不算数。 */
 function changeNumber(

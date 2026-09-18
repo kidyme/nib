@@ -53,3 +53,39 @@ export function CloseIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function ArrowLeftIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M8.2 3.6L4 8l4.2 4.4M4.5 8h7.2" />
+    </svg>
+  );
+}
+
+export function TypeIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M3.2 4.4h9.6M8 4.4v7.2M5.8 11.6h4.4" />
+    </svg>
+  );
+}
+
+export function PaletteIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <circle cx="8" cy="8" r="5.3" />
+      <circle cx="6.2" cy="6.1" r=".9" fill="currentColor" stroke="none" />
+      <circle cx="9.8" cy="6.1" r=".9" fill="currentColor" stroke="none" />
+      <circle cx="5.4" cy="9.6" r=".9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function BracesIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M6.3 2.6c-1.5 0-1.7.9-1.7 2.1 0 1.4-.2 2.2-1.8 3.3 1.6 1.1 1.8 1.9 1.8 3.3 0 1.2.2 2.1 1.7 2.1" />
+      <path d="M9.7 2.6c1.5 0 1.7.9 1.7 2.1 0 1.4.2 2.2 1.8 3.3-1.6 1.1-1.8 1.9-1.8 3.3 0 1.2-.2 2.1-1.7 2.1" />
+    </svg>
+  );
+}

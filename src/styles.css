@@ -80,6 +80,7 @@
   --text-ui-sm: calc(var(--f-ui-size) * 0.86);
   --text-ui: calc(var(--f-ui-size) * 0.93);
   --text-ui-lg: var(--f-ui-size);
+  --text-ui-xl: calc(var(--f-ui-size) * 1.45);
 
   /* 杂项 */
   --color-scrollbar: var(--c-scrollbar);
@@ -87,75 +88,81 @@
 }
 
 /* ---------------------------------------------------------------------------
-   预设：深色
+   预设：Everforest（深）
+   ---------------------------------------------------------------------------
+   取自 Codex 的 codex-theme-v1（surface #2d353b / ink #d3c6aa / accent #a7c080），
+   其余色值按同一套色阶补全：canvas = surface，卡片再亮一档，输入区再暗一档。
    --------------------------------------------------------------------------- */
-[data-theme="dark"] {
+[data-theme="everforest"] {
   color-scheme: dark;
 
-  --c-canvas: #0e1014;
-  --c-surface: #16181d;
-  --c-raised: #1e2128;
-  --c-sunken: #0a0b0e;
-  --c-sidebar: #121419;
-  --c-titlebar: #15171d;
+  --c-canvas: #2d353b;
+  --c-surface: #2d353b;
+  --c-raised: #343f44;
+  --c-sunken: #232a2e;
+  --c-sidebar: #272e33;
+  --c-titlebar: #2d353b;
   --c-overlay: rgb(0 0 0 / 0.55);
 
-  --c-line: #262a32;
-  --c-line-strong: #3a414b;
+  --c-line: #3d484d;
+  --c-line-strong: #4f585e;
 
-  --c-ink: #e9ebef;
-  --c-ink-muted: #99a1ae;
-  --c-ink-subtle: #6b7381;
-  --c-ink-inverse: #0e1014;
+  --c-ink: #d3c6aa;
+  --c-ink-muted: #a9a28e;
+  --c-ink-subtle: #8a8574;
+  --c-ink-inverse: #232a2e;
 
-  --c-accent: #4f8cff;
-  --c-accent-hover: #6d9fff;
-  --c-accent-active: #3d78e8;
-  --c-accent-fg: #ffffff;
+  --c-accent: #a7c080;
+  --c-accent-hover: #b7cd95;
+  --c-accent-active: #96b173;
+  --c-accent-fg: #232a2e;
 
-  --c-success: #3ecf8e;
-  --c-warning: #e5a94a;
-  --c-danger: #f0616d;
-  --c-info: #4f8cff;
+  --c-success: #a7c080;
+  --c-warning: #dbbc7f;
+  --c-danger: #e67e80;
+  --c-info: #7fbbb3;
 
-  --c-scrollbar: #2e343d;
-  --c-scrollbar-hover: #414954;
+  --c-scrollbar: #3d484d;
+  --c-scrollbar-hover: #4f585e;
 }
 
 /* ---------------------------------------------------------------------------
-   预设：浅色
+   预设：GitHub（浅）
+   ---------------------------------------------------------------------------
+   同样取自 codex-theme-v1 的浅色（surface #ffffff / ink #1f2328 / accent #0969da），
+   其余按 GitHub 自家色板补全。
    --------------------------------------------------------------------------- */
-[data-theme="light"] {
+[data-theme="github"] {
   color-scheme: light;
 
-  --c-canvas: #f5f6f8;
+  --c-canvas: #f6f8fa;
   --c-surface: #ffffff;
   --c-raised: #ffffff;
-  --c-sunken: #eceef2;
-  --c-sidebar: #eaecf1;
+  --c-sunken: #eef1f4;
+  --c-sidebar: #f6f8fa;
   --c-titlebar: #ffffff;
-  --c-overlay: rgb(28 32 40 / 0.35);
+  --c-overlay: rgb(31 35 40 / 0.35);
 
-  --c-line: #e1e4ea;
-  --c-line-strong: #c6ccd6;
+  --c-line: #d8dee4;
+  --c-line-strong: #afb8c1;
 
-  --c-ink: #191c21;
-  --c-ink-muted: #5b626e;
-  --c-ink-subtle: #8a919d;
+  --c-ink: #1f2328;
+  --c-ink-muted: #59636e;
+  --c-ink-subtle: #818b98;
   --c-ink-inverse: #ffffff;
 
-  --c-accent: #2f6fe4;
-  --c-accent-hover: #1f5fd6;
-  --c-accent-active: #1a51bd;
+  --c-accent: #0969da;
+  --c-accent-hover: #0a5fc2;
+  --c-accent-active: #0757ba;
   --c-accent-fg: #ffffff;
 
-  --c-success: #157f56;
-  --c-warning: #a86a08;
-  --c-danger: #c8353f;
-  --c-info: #2f6fe4;
+  --c-success: #1a7f37;
+  --c-warning: #9a6700;
+  --c-danger: #cf222e;
+  --c-info: #0969da;
 
-  --c-scrollbar: #c6ccd6;
-  --c-scrollbar-hover: #a9b1bd;
+  --c-scrollbar: #d8dee4;
+  --c-scrollbar-hover: #afb8c1;
 }
 
 /* ---------------------------------------------------------------------------
