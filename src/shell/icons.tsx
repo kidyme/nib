@@ -28,19 +28,28 @@ export function BookIcon({ className }: IconProps) {
   );
 }
 
-export function SunIcon({ className }: IconProps) {
+export function SlidersIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">
-      <circle cx="8" cy="8" r="3.1" />
-      <path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.35 3.35l1.2 1.2M11.45 11.45l1.2 1.2M12.65 3.35l-1.2 1.2M4.55 11.45l-1.2 1.2" />
+      <path d="M2.5 5h1.9M7.6 5h5.9M2.5 11h6M11.6 11h1.9" />
+      <circle cx="6" cy="5" r="1.6" />
+      <circle cx="10" cy="11" r="1.6" />
     </svg>
   );
 }
 
-export function MoonIcon({ className }: IconProps) {
+export function CheckIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className} aria-hidden="true">
-      <path d="M13.4 9.6A5.8 5.8 0 016.4 2.6a5.8 5.8 0 107 7z" />
+      <path d="M3.5 8.4l3 3 6-7" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} aria-hidden="true">
+      <path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" />
     </svg>
   );
 }

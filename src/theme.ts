@@ -28,10 +28,6 @@ function isThemeId(value: unknown): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
 
-export function findTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find((theme) => theme.id === id) ?? THEMES[0];
-}
-
 export function readTheme(): ThemeId {
   const stored = localStorage.getItem(STORAGE_KEY);
   return isThemeId(stored) ? stored : DEFAULT_THEME;
@@ -47,9 +43,4 @@ export function initTheme(): ThemeId {
   const id = readTheme();
   document.documentElement.dataset.theme = id;
   return id;
-}
-
-export function nextTheme(id: ThemeId): ThemeId {
-  const index = THEMES.findIndex((theme) => theme.id === id);
-  return THEMES[(index + 1) % THEMES.length].id;
 }

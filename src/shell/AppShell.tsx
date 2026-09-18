@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 import type { AppDefinition } from "../apps/registry";
-import { findTheme, type ThemeId } from "../theme";
-import { MoonIcon, SunIcon } from "./icons";
+import { SlidersIcon } from "./icons";
 
 type AppShellProps = {
   apps: AppDefinition[];
   activeApp: AppDefinition;
   onSelectApp: (id: string) => void;
-  theme: ThemeId;
-  onToggleTheme: () => void;
+  onOpenSettings: () => void;
   children: ReactNode;
 };
 
@@ -19,13 +17,9 @@ export function AppShell({
   apps,
   activeApp,
   onSelectApp,
-  theme,
-  onToggleTheme,
+  onOpenSettings,
   children,
 }: AppShellProps) {
-  const activeTheme = findTheme(theme);
-  const ThemeIcon = activeTheme.mode === "dark" ? MoonIcon : SunIcon;
-
   return (
     <div className="flex h-full">
       <aside className="flex w-[220px] shrink-0 flex-col border-r border-line bg-sidebar">
@@ -64,12 +58,12 @@ export function AppShell({
         <div className="border-t border-line p-2.5">
           <button
             type="button"
-            onClick={onToggleTheme}
-            title="切换配色"
+            onClick={onOpenSettings}
             className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-ink-muted transition-colors duration-100 hover:bg-raised hover:text-ink"
           >
-            <ThemeIcon className="size-4 shrink-0" />
-            <span className="truncate">{activeTheme.label}</span>
+            <SlidersIcon className="size-4 shrink-0" />
+            <span className="flex-1 truncate text-left">设置</span>
+            <span className="shrink-0 text-[11px] text-ink-subtle">⌘,</span>
           </button>
         </div>
       </aside>
