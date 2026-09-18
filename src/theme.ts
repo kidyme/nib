@@ -137,13 +137,18 @@ export function presetTheme(id: ThemeId): ThemeState {
   return { base: id, colors: readThemeColors() };
 }
 
+/** 只写 DOM、不落盘：设置页改的是草稿，要点保存才写 localStorage。 */
 export function applyTheme({ base, colors }: ThemeState): void {
   const root = document.documentElement;
   root.dataset.theme = base;
   for (const token of COLOR_TOKENS) {
     root.style.setProperty(cssVar(token.id), colors[token.id]);
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ base, colors }));
+}
+
+/** 保存：把当前配色落盘，下次启动接着用。 */
+export function saveTheme(state: ThemeState): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 /** 渲染之前同步跑，避免首帧闪一下默认配色。 */

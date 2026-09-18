@@ -4,6 +4,9 @@
  * 打开时整窗换掉应用外壳：左边是设置导航，右边是设置内容。
  * 排版照 Codex 那套走——小节标题 + 一张圆角卡片，卡片里一行一个设置项，
  * 行首是名称和说明，行尾是控件。
+ *
+ * 改动先落在本地草稿上：草稿即时写 DOM，所以能边改边看到效果，但不落盘。
+ * 右上角保存才写回 localStorage；直接返回就等于放弃草稿，回去还是原来那套。
  */
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -11,6 +14,7 @@ import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
   SYSTEM_FAMILY,
+  applyFonts,
   loadFontFamilies,
   normalizeFonts,
   type FontRole,
@@ -20,8 +24,10 @@ import {
 import {
   COLOR_TOKENS,
   THEMES,
+  applyTheme,
   isThemeId,
   normalizeColors,
+  presetTheme,
   type ThemeColors,
   type ThemeId,
   type ThemeState,
@@ -35,14 +41,15 @@ import {
   TypeIcon,
 } from "../shell/icons";
 
+/** 一份完整配置：配色 + 两套字体。 */
+type Config = { theme: ThemeState; fonts: FontSettings };
+
 type SettingsPageProps = {
+  /** 上次保存的配置，进来时拿它当草稿的初值和「还原」的目标 */
   theme: ThemeState;
   fonts: FontSettings;
   onBack: () => void;
-  onSelectPreset: (id: ThemeId) => void;
-  onChangeColors: (colors: ThemeColors) => void;
-  onChangeFont: (role: FontRole, patch: Partial<FontSetting>) => void;
-  onImport: (next: { theme: ThemeState; fonts: FontSettings }) => void;
+  onSave: (next: Config) => void;
 };
 
 const PAGE_GROUPS = [
@@ -72,16 +79,29 @@ const TITLEBAR_DRAG = { "data-tauri-drag-region": true } as const;
 
 const COLOR_GROUPS = [...new Set(COLOR_TOKENS.map((token) => token.group))];
 
-export function SettingsPage({
-  theme,
-  fonts,
-  onBack,
-  onSelectPreset,
-  onChangeColors,
-  onChangeFont,
-  onImport,
-}: SettingsPageProps) {
+export function SettingsPage({ theme, fonts, onBack, onSave }: SettingsPageProps) {
   const [page, setPage] = useState<PageId>("fonts");
+  const saved: Config = { theme, fonts };
+  // 草稿：改了立刻写 DOM 预览效果，但没落盘，返回就没了。
+  const [draft, setDraft] = useState<Config>(saved);
+  const dirty = draft.theme !== theme || draft.fonts !== fonts;
+
+  useEffect(() => {
+    applyTheme(draft.theme);
+    applyFonts(draft.fonts);
+  }, [draft]);
+
+  const selectPreset = (id: ThemeId) =>
+    setDraft((current) => ({ ...current, theme: presetTheme(id) }));
+
+  const changeColors = (colors: ThemeColors) =>
+    setDraft((current) => ({ ...current, theme: { ...current.theme, colors } }));
+
+  const changeFont = (role: FontRole, patch: Partial<FontSetting>) =>
+    setDraft((current) => ({
+      ...current,
+      fonts: { ...current.fonts, [role]: { ...current.fonts[role], ...patch } },
+    }));
 
   return (
     <div className="flex h-full bg-canvas">
@@ -109,21 +129,49 @@ export function SettingsPage({
         </nav>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="h-12 shrink-0" {...TITLEBAR_DRAG} />
-        <div className="mx-auto w-full max-w-[1120px] px-8 pt-6 pb-24">
-          <h1 className="pb-8 text-ui-xl font-medium text-ink">{PAGE_TITLES[page]}</h1>
-          {page === "fonts" && <FontsPage fonts={fonts} onChangeFont={onChangeFont} />}
-          {page === "theme" && (
-            <ThemePage
-              theme={theme}
-              onSelectPreset={onSelectPreset}
-              onChangeColors={onChangeColors}
-            />
-          )}
-          {page === "data" && <DataPage theme={theme} fonts={fonts} onImport={onImport} />}
-        </div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-12 shrink-0 items-center px-8">
+          {/* 跟下面内容同一个宽度，宽窗口下按钮不会飘到屏幕边上去 */}
+          <div className="mx-auto flex h-full w-full max-w-[1120px] items-center gap-2">
+            {/* 拖动区只占左边，右边留给按钮（按钮会自己挡住拖动） */}
+            <div className="h-full flex-1" {...TITLEBAR_DRAG} />
+            {dirty && <span className="pr-1 text-ui-sm text-ink-subtle">有未保存的改动</span>}
+            <button
+              type="button"
+              onClick={() => setDraft(saved)}
+              disabled={!dirty}
+              className={SECONDARY_BUTTON}
+            >
+              还原
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(draft)}
+              disabled={!dirty}
+              className={PRIMARY_BUTTON}
+            >
+              保存
+            </button>
+          </div>
+        </header>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1120px] px-8 pt-6 pb-24">
+            <h1 className="pb-8 text-ui-xl font-medium text-ink">{PAGE_TITLES[page]}</h1>
+            {page === "fonts" && <FontsPage fonts={draft.fonts} onChangeFont={changeFont} />}
+            {page === "theme" && (
+              <ThemePage
+                theme={draft.theme}
+                onSelectPreset={selectPreset}
+                onChangeColors={changeColors}
+              />
+            )}
+            {page === "data" && (
+              <DataPage theme={draft.theme} fonts={draft.fonts} onImport={setDraft} />
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -168,7 +216,7 @@ function FontsPage({
   onChangeFont,
 }: {
   fonts: FontSettings;
-  onChangeFont: SettingsPageProps["onChangeFont"];
+  onChangeFont: (role: FontRole, patch: Partial<FontSetting>) => void;
 }) {
   // 系统字体是异步来的，先拿内置列表顶上，加载完再换。
   const [families, setFamilies] = useState(FONT_FAMILIES);
@@ -508,7 +556,7 @@ function DataPage({
 }: {
   theme: ThemeState;
   fonts: FontSettings;
-  onImport: SettingsPageProps["onImport"];
+  onImport: (next: Config) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
@@ -545,7 +593,7 @@ function DataPage({
         theme: { base: isThemeId(rawTheme.base) ? rawTheme.base : theme.base, colors },
         fonts: normalizeFonts(raw.fonts, fonts),
       });
-      setStatus({ text: "已导入" });
+      setStatus({ text: "已导入到草稿，点右上角保存生效" });
     } catch (error) {
       setStatus({ text: `导入失败：${(error as Error).message}`, error: true });
     }
@@ -626,6 +674,13 @@ const HEX_INPUT =
 
 const BUTTON =
   "rounded-md border border-line bg-canvas px-2.5 py-1 text-ui-sm text-ink-muted transition-colors hover:bg-sunken hover:text-ink";
+
+/** 设置页右上角的两个按钮：还原是描边、保存是主色。 */
+const SECONDARY_BUTTON =
+  "rounded-md border border-line px-3 py-1 text-ui-sm text-ink-muted transition-colors enabled:hover:bg-sunken enabled:hover:text-ink disabled:opacity-40";
+
+const PRIMARY_BUTTON =
+  "rounded-md bg-accent px-3 py-1 text-ui-sm font-medium text-accent-fg transition-colors enabled:hover:bg-accent-hover disabled:bg-sunken disabled:text-ink-subtle";
 
 /** 数字输入允许先清空再输入，空值不算数。 */
 function changeNumber(

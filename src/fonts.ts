@@ -1,8 +1,9 @@
 /**
  * 字体层：界面外壳（系统字体）和内容区（内容字体）各一套。
  *
- * 默认值写在 styles.css 的 :root，这里只负责把用户改过的值内联到 <html>
- * 并持久化；读的时候直接读 CSS 变量，所以默认值和自定义值只有一个出口。
+ * 默认值写在 styles.css 的 :root，这里只负责把用户改过的值内联到 <html>；
+ * 落盘分开做（applyFonts 只写 DOM，saveFonts 才写 localStorage）。
+ * 读的时候直接读 CSS 变量，所以默认值和自定义值只有一个出口。
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -86,6 +87,7 @@ export function readFontSettings(): FontSettings {
   };
 }
 
+/** 只写 DOM、不落盘：设置页改的是草稿，要点保存才写 localStorage。 */
 export function applyFonts(fonts: FontSettings): void {
   const root = document.documentElement;
   for (const role of ["ui", "content"] as const) {
@@ -95,6 +97,10 @@ export function applyFonts(fonts: FontSettings): void {
     root.style.setProperty(varName(role, "weight"), `${font.weight}`);
   }
   root.style.setProperty("--f-content-leading", `${fonts.content.leading}`);
+}
+
+/** 保存：把当前字体落盘，下次启动接着用。 */
+export function saveFonts(fonts: FontSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(fonts));
 }
 
