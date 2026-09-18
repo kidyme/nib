@@ -296,8 +296,12 @@ function FontPicker({
       if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       close();
     };
-    // 面板是固定定位的，外面的列表一滚它就对不上位置了，索性关掉。
-    const onScroll = () => close();
+    // 面板是固定定位的，外面的列表一滚它就对不上位置了，索性关掉；
+    // 面板自己的列表不算「外面」，不然滚字体就把弹层滚没了。
+    const onScroll = (event: Event) => {
+      if (panelRef.current?.contains(event.target as Node)) return;
+      close();
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
