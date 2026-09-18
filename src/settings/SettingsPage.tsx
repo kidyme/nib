@@ -107,8 +107,8 @@ export function SettingsPage({
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="h-12 shrink-0" {...TITLEBAR_DRAG} />
-        <div className="mx-auto max-w-[640px] px-8 pb-24">
-          <h1 className="pb-6 text-ui-xl font-medium text-ink">{PAGE_TITLES[page]}</h1>
+        <div className="mx-auto w-full max-w-[1120px] px-8 pt-6 pb-24">
+          <h1 className="pb-8 text-ui-xl font-medium text-ink">{PAGE_TITLES[page]}</h1>
           {page === "fonts" && <FontsPage fonts={fonts} onChangeFont={onChangeFont} />}
           {page === "theme" && (
             <ThemePage
@@ -152,8 +152,8 @@ function NavItem({
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="pb-7">
-      <h2 className="pb-2 text-ui-sm font-medium text-ink-muted">{title}</h2>
+    <section className="pb-10">
+      <h2 className="pb-3 text-ui-sm font-medium text-ink-muted">{title}</h2>
       <div className="overflow-hidden rounded-xl bg-raised">{children}</div>
     </section>
   );
@@ -434,7 +434,7 @@ function DataPage({
           </label>
         </div>
       </Row>
-      <div className="border-t border-line p-3.5">
+      <div className="border-t border-line p-7">
         <textarea
           ref={textareaRef}
           readOnly
@@ -454,7 +454,7 @@ function DataPage({
 
 /** 卡片里的一行：左边名称 + 说明，右边控件。分隔线靠首行豁免拼出来。 */
 const ROW =
-  "flex w-full items-center gap-4 border-t border-line px-3.5 py-2.5 text-left first:border-t-0";
+  "flex w-full items-center gap-4 border-t border-line px-7 py-4 text-left first:border-t-0";
 
 function Row({
   label,
@@ -469,7 +469,7 @@ function Row({
     <div className={ROW}>
       <div className="min-w-0 flex-1">
         <div className="text-ui text-ink">{label}</div>
-        {hint && <div className="text-ui-sm text-ink-subtle">{hint}</div>}
+        {hint && <div className="pt-1 text-ui-sm text-ink-subtle">{hint}</div>}
       </div>
       <div className="flex shrink-0 items-center gap-2.5">{children}</div>
     </div>
@@ -484,7 +484,7 @@ const HEX_INPUT =
 
 /** 分组的小标题也是一行，所以照样要画分隔线（首行除外）。 */
 const GROUP_HEAD =
-  "border-t border-line px-3.5 py-1.5 text-ui-sm text-ink-subtle first:border-t-0";
+  "border-t border-line px-7 py-2 text-ui-sm text-ink-subtle first:border-t-0";
 
 const BUTTON =
   "rounded-md border border-line bg-canvas px-2.5 py-1 text-ui-sm text-ink-muted transition-colors hover:bg-sunken hover:text-ink";
