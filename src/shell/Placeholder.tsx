@@ -6,6 +6,7 @@ type PlaceholderProps = {
   hint: string;
 };
 
+/** 字号用 em，跟着内容字体配置走。 */
 export function Placeholder({ icon: Icon, title, hint }: PlaceholderProps) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-10 text-center">
@@ -13,8 +14,8 @@ export function Placeholder({ icon: Icon, title, hint }: PlaceholderProps) {
         <Icon className="size-5 text-ink-subtle" />
       </div>
       <div className="space-y-1.5">
-        <h1 className="text-[15px] font-medium text-ink">{title}</h1>
-        <p className="max-w-xs text-[13px] leading-relaxed text-ink-muted">{hint}</p>
+        <h1 className="text-[1.15em] font-medium text-ink">{title}</h1>
+        <p className="max-w-xs text-[0.95em] text-ink-muted">{hint}</p>
       </div>
     </div>
   );

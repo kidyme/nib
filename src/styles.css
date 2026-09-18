@@ -12,10 +12,24 @@
    =========================================================================== */
 
 @theme {
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+  --font-mono: ui-monospace, Menlo, Monaco, "SF Mono", monospace;
+}
+
+/* ---------------------------------------------------------------------------
+   字体 token
+   ---------------------------------------------------------------------------
+   system = 界面外壳（侧边栏、标题栏、设置页），content = 应用内容区。
+   两套都能在设置里改，改完由 fonts.ts 内联覆盖这几个变量。
+   --------------------------------------------------------------------------- */
+:root {
+  --f-ui-family: system-ui;
+  --f-ui-size: 14px;
+  --f-ui-weight: 400;
+
+  --f-content-family: system-ui;
+  --f-content-size: 15px;
+  --f-content-weight: 400;
+  --f-content-leading: 1.65;
 }
 
 @theme inline {
@@ -30,6 +44,7 @@
   --color-raised: var(--c-raised);
   --color-sunken: var(--c-sunken);
   --color-sidebar: var(--c-sidebar);
+  --color-titlebar: var(--c-titlebar);
   --color-overlay: var(--c-overlay);
 
   /* 描边 */
@@ -60,6 +75,12 @@
   --color-info: var(--c-info);
   --color-info-soft: var(--c-info-soft);
 
+  /* 界面字号：以系统字号为基准缩放，改一处全壳生效 */
+  --text-ui-xs: calc(var(--f-ui-size) * 0.79);
+  --text-ui-sm: calc(var(--f-ui-size) * 0.86);
+  --text-ui: calc(var(--f-ui-size) * 0.93);
+  --text-ui-lg: var(--f-ui-size);
+
   /* 杂项 */
   --color-scrollbar: var(--c-scrollbar);
   --color-scrollbar-hover: var(--c-scrollbar-hover);
@@ -76,6 +97,7 @@
   --c-raised: #1e2128;
   --c-sunken: #0a0b0e;
   --c-sidebar: #121419;
+  --c-titlebar: #15171d;
   --c-overlay: rgb(0 0 0 / 0.55);
 
   --c-line: #262a32;
@@ -90,17 +112,11 @@
   --c-accent-hover: #6d9fff;
   --c-accent-active: #3d78e8;
   --c-accent-fg: #ffffff;
-  --c-accent-soft: rgb(79 140 255 / 0.15);
-  --c-ring: rgb(79 140 255 / 0.55);
 
   --c-success: #3ecf8e;
-  --c-success-soft: rgb(62 207 142 / 0.15);
   --c-warning: #e5a94a;
-  --c-warning-soft: rgb(229 169 74 / 0.15);
   --c-danger: #f0616d;
-  --c-danger-soft: rgb(240 97 109 / 0.15);
   --c-info: #4f8cff;
-  --c-info-soft: rgb(79 140 255 / 0.15);
 
   --c-scrollbar: #2e343d;
   --c-scrollbar-hover: #414954;
@@ -117,6 +133,7 @@
   --c-raised: #ffffff;
   --c-sunken: #eceef2;
   --c-sidebar: #eaecf1;
+  --c-titlebar: #ffffff;
   --c-overlay: rgb(28 32 40 / 0.35);
 
   --c-line: #e1e4ea;
@@ -131,20 +148,30 @@
   --c-accent-hover: #1f5fd6;
   --c-accent-active: #1a51bd;
   --c-accent-fg: #ffffff;
-  --c-accent-soft: rgb(47 111 228 / 0.10);
-  --c-ring: rgb(47 111 228 / 0.45);
 
   --c-success: #157f56;
-  --c-success-soft: rgb(21 127 86 / 0.10);
   --c-warning: #a86a08;
-  --c-warning-soft: rgb(168 106 8 / 0.10);
   --c-danger: #c8353f;
-  --c-danger-soft: rgb(200 53 63 / 0.10);
   --c-info: #2f6fe4;
-  --c-info-soft: rgb(47 111 228 / 0.10);
 
   --c-scrollbar: #c6ccd6;
   --c-scrollbar-hover: #a9b1bd;
+}
+
+/* ---------------------------------------------------------------------------
+   半透明衍生色
+   ---------------------------------------------------------------------------
+   全部由上面的实色算出来：改主色/状态色不用再单独配一份半透明值，
+   用户自定义配色时也只需要管实色。必须放在两套预设后面才能覆盖它们。
+   --------------------------------------------------------------------------- */
+[data-theme] {
+  --c-accent-soft: color-mix(in srgb, var(--c-accent) 14%, transparent);
+  --c-ring: color-mix(in srgb, var(--c-accent) 50%, transparent);
+
+  --c-success-soft: color-mix(in srgb, var(--c-success) 14%, transparent);
+  --c-warning-soft: color-mix(in srgb, var(--c-warning) 14%, transparent);
+  --c-danger-soft: color-mix(in srgb, var(--c-danger) 14%, transparent);
+  --c-info-soft: color-mix(in srgb, var(--c-info) 14%, transparent);
 }
 
 /* ===========================================================================
@@ -162,8 +189,9 @@
     margin: 0;
     background-color: var(--c-canvas);
     color: var(--c-ink);
-    font-family: var(--font-sans);
-    font-size: 14px;
+    font-family: var(--f-ui-family), system-ui, sans-serif;
+    font-size: var(--f-ui-size);
+    font-weight: var(--f-ui-weight);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -177,6 +205,14 @@
   [contenteditable],
   .select-text {
     user-select: text;
+  }
+
+  /* 应用内容区：正文用自己那套字体配置，和界面外壳分开 */
+  [data-font="content"] {
+    font-family: var(--f-content-family), system-ui, sans-serif;
+    font-size: var(--f-content-size);
+    font-weight: var(--f-content-weight);
+    line-height: var(--f-content-leading);
   }
 
   ::selection {
@@ -206,5 +242,25 @@
   :focus-visible {
     outline: 2px solid var(--c-ring);
     outline-offset: 1px;
+  }
+}
+
+@layer components {
+  /* 原生取色器：去掉 WebKit 的默认外框，只留一个圆角色块 */
+  .color-input {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .color-input::-webkit-color-swatch {
+    border: 1px solid var(--c-line-strong);
+    border-radius: 6px;
   }
 }
