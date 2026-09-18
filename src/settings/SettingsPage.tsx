@@ -6,6 +6,7 @@
  * 行首是名称和说明，行尾是控件。
  */
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
@@ -29,6 +30,7 @@ import {
   ArrowLeftIcon,
   BracesIcon,
   CheckIcon,
+  ChevronDownIcon,
   PaletteIcon,
   TypeIcon,
 } from "../shell/icons";
@@ -207,23 +209,14 @@ function FontRows({
   withLeading?: boolean;
   onChange: (patch: Partial<FontSetting>) => void;
 }) {
-  // 第一项固定是「系统默认」；存过的字体名可能不在系统列表里，补进去免得选不回来。
-  const options = [...new Set([SYSTEM_FAMILY, ...families, value.family])];
-
   return (
     <>
       <Row label="字体" hint="本机已安装的字体">
-        <select
+        <FontPicker
+          families={families}
           value={value.family}
-          onChange={(event) => onChange({ family: event.target.value })}
-          className={`${CONTROL} w-[240px]`}
-        >
-          {options.map((family) => (
-            <option key={family} value={family}>
-              {family === SYSTEM_FAMILY ? "系统默认" : family}
-            </option>
-          ))}
-        </select>
+          onChange={(family) => onChange({ family })}
+        />
       </Row>
       <Row label="字号">
         <input
@@ -264,6 +257,137 @@ function FontRows({
       )}
     </>
   );
+}
+
+/**
+ * 字体选择框。
+ *
+ * 不用原生 <select>：macOS 会把它弹成一条几百项的长菜单，一滚就跳回顶部。
+ * 这里自己画一个，面板用 fixed 挂在 body 上（躲开卡片的 overflow-hidden），
+ * 列表自己滚，顶上带搜索。
+ */
+function FontPicker({
+  families,
+  value,
+  onChange,
+}: {
+  families: string[];
+  value: string;
+  onChange: (family: string) => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ top?: number; bottom?: number; right: number; maxHeight: number }>();
+  const [query, setQuery] = useState("");
+
+  // 第一项固定是「系统默认」；存过的字体名可能不在系统列表里，补进去免得选不回来。
+  const options = [...new Set([SYSTEM_FAMILY, ...families, value])];
+  const keyword = query.trim().toLowerCase();
+  const matches = keyword
+    ? options.filter((family) => family.toLowerCase().includes(keyword))
+    : options;
+
+  const close = () => setBox(undefined);
+
+  useEffect(() => {
+    if (!box) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      close();
+    };
+    // 面板是固定定位的，外面的列表一滚它就对不上位置了，索性关掉。
+    const onScroll = () => close();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [box]);
+
+  const toggle = () => {
+    if (box) return close();
+    const rect = triggerRef.current!.getBoundingClientRect();
+    // 下面放不下就翻到上面去，省得面板跑出窗口。
+    const below = window.innerHeight - rect.bottom - 24;
+    const flip = below < 200;
+    setQuery("");
+    setBox({
+      right: window.innerWidth - rect.right,
+      top: flip ? undefined : rect.bottom + 6,
+      bottom: flip ? window.innerHeight - rect.top + 6 : undefined,
+      maxHeight: Math.max(160, Math.min(360, flip ? rect.top - 24 : below)),
+    });
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggle}
+        className={`${CONTROL} flex w-[240px] items-center justify-between gap-2`}
+      >
+        <span className="truncate">{fontLabel(value)}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 text-ink-muted" />
+      </button>
+
+      {box &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="fixed z-50 flex w-[240px] flex-col overflow-hidden rounded-lg border border-line-strong bg-raised shadow-xl"
+            style={box}
+          >
+            <input
+              autoFocus
+              value={query}
+              spellCheck={false}
+              placeholder="搜索字体"
+              onChange={(event) => setQuery(event.target.value)}
+              className="shrink-0 border-b border-line bg-transparent px-3 py-2 text-ui text-ink outline-none placeholder:text-ink-subtle"
+            />
+            <div className="min-h-0 flex-1 overflow-y-auto py-1">
+              {matches.map((family) => (
+                <button
+                  key={family}
+                  type="button"
+                  onClick={() => {
+                    onChange(family);
+                    close();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ink hover:bg-accent-soft"
+                >
+                  <span className="truncate" style={{ fontFamily: family }}>
+                    {fontLabel(family)}
+                  </span>
+                  {family === value && (
+                    <CheckIcon className="ml-auto size-3.5 shrink-0 text-accent" />
+                  )}
+                </button>
+              ))}
+              {matches.length === 0 && (
+                <div className="px-3 py-2 text-ui-sm text-ink-subtle">没有匹配的字体</div>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/** 字体族在界面上的名字：system-ui 不是具体字体，写成「系统默认」。 */
+function fontLabel(family: string): string {
+  return family === SYSTEM_FAMILY ? "系统默认" : family;
 }
 
 function ThemePage({
