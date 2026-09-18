@@ -5,6 +5,8 @@
  * 并持久化；读的时候直接读 CSS 变量，所以默认值和自定义值只有一个出口。
  */
 
+import { invoke } from "@tauri-apps/api/core";
+
 export type FontRole = "ui" | "content";
 
 export type FontSetting = {
@@ -17,6 +19,7 @@ export type FontSetting = {
 
 export type FontSettings = Record<FontRole, FontSetting>;
 
+/** 拿不到系统字体列表时（浏览器里跑 vite、调用失败）的兜底。 */
 export const FONT_FAMILIES = [
   "system-ui",
   "PingFang SC",
@@ -39,6 +42,16 @@ export const FONT_WEIGHTS = [
 ];
 
 const STORAGE_KEY = "nib:fonts";
+
+let installedFonts: Promise<string[]> | undefined;
+
+/** 本机已安装的字体族，只问系统一次。 */
+export function loadFontFamilies(): Promise<string[]> {
+  installedFonts ??= invoke<string[]>("list_fonts")
+    .then((families) => (families.length > 0 ? families : FONT_FAMILIES))
+    .catch(() => FONT_FAMILIES);
+  return installedFonts;
+}
 
 function varName(role: FontRole, key: "family" | "size" | "weight"): string {
   if (key === "family") return `--f-${role}-family`;

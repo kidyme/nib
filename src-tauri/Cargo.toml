@@ -23,6 +23,9 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# 只有 macOS 用得上：列举本机字体（CoreText）。
+objc2-core-foundation = "0.3"
+objc2-core-text = { version = "0.3", features = ["CTFontManager"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

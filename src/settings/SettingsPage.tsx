@@ -5,10 +5,11 @@
  * 排版照 Codex 那套走——小节标题 + 一张圆角卡片，卡片里一行一个设置项，
  * 行首是名称和说明，行尾是控件。
  */
-import { useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
+  loadFontFamilies,
   normalizeFonts,
   type FontRole,
   type FontSetting,
@@ -166,6 +167,13 @@ function FontsPage({
   fonts: FontSettings;
   onChangeFont: SettingsPageProps["onChangeFont"];
 }) {
+  // 系统字体是异步来的，先拿内置列表顶上，加载完再换。
+  const [families, setFamilies] = useState(FONT_FAMILIES);
+
+  useEffect(() => {
+    loadFontFamilies().then(setFamilies);
+  }, []);
+
   return (
     <>
       <Section title="内容字体">
@@ -180,7 +188,7 @@ function FontsPage({
       </Section>
 
       <datalist id="nib-font-families">
-        {FONT_FAMILIES.map((family) => (
+        {families.map((family) => (
           <option key={family} value={family} />
         ))}
       </datalist>
@@ -199,13 +207,13 @@ function FontRows({
 }) {
   return (
     <>
-      <Row label="字体" hint="直接输入字体名，或从常用字体里挑">
+      <Row label="字体" hint="从本机已安装字体里挑，也可以直接输入">
         <input
           list="nib-font-families"
           value={value.family}
           spellCheck={false}
           onChange={(event) => onChange({ family: event.target.value })}
-          className={`${CONTROL} w-[200px]`}
+          className={`${CONTROL} w-[220px]`}
         />
       </Row>
       <Row label="字号">
