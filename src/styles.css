@@ -207,6 +207,12 @@
     user-select: text;
   }
 
+  /* 能点的都是手掌：Tailwind v4 的预检把 button 的 cursor 重置成了默认箭头 */
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+
   /* 应用内容区：正文用自己那套字体配置，和界面外壳分开 */
   [data-font="content"] {
     font-family: var(--f-content-family), system-ui, sans-serif;
