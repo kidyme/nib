@@ -5,7 +5,7 @@
  * 排版照 Codex 那套走——小节标题 + 一张圆角卡片，卡片里一行一个设置项，
  * 行首是名称和说明，行尾是控件。
  */
-import { Fragment, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
@@ -154,7 +154,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="pb-10">
       <h2 className="pb-3 text-ui-sm font-medium text-ink-muted">{title}</h2>
-      <div className="overflow-hidden rounded-xl bg-raised">{children}</div>
+      <div className="overflow-hidden rounded-xl bg-raised px-8">{children}</div>
     </section>
   );
 }
@@ -290,21 +290,18 @@ function ThemePage({
         </Row>
       </Section>
 
-      <Section title="配色">
-        {COLOR_GROUPS.map((group) => (
-          <Fragment key={group}>
-            <div className={GROUP_HEAD}>{group}</div>
-            {COLOR_TOKENS.filter((token) => token.group === group).map((token) => (
-              <ColorRow
-                key={token.id}
-                label={token.label}
-                value={theme.colors[token.id]}
-                onChange={(value) => onChangeColors({ ...theme.colors, [token.id]: value })}
-              />
-            ))}
-          </Fragment>
-        ))}
-      </Section>
+      {COLOR_GROUPS.map((group) => (
+        <Section key={group} title={group}>
+          {COLOR_TOKENS.filter((token) => token.group === group).map((token) => (
+            <ColorRow
+              key={token.id}
+              label={token.label}
+              value={theme.colors[token.id]}
+              onChange={(value) => onChangeColors({ ...theme.colors, [token.id]: value })}
+            />
+          ))}
+        </Section>
+      ))}
     </>
   );
 }
@@ -434,7 +431,7 @@ function DataPage({
           </label>
         </div>
       </Row>
-      <div className="border-t border-line p-7">
+      <div className="border-t border-line py-8">
         <textarea
           ref={textareaRef}
           readOnly
@@ -454,7 +451,7 @@ function DataPage({
 
 /** 卡片里的一行：左边名称 + 说明，右边控件。分隔线靠首行豁免拼出来。 */
 const ROW =
-  "flex w-full items-center gap-4 border-t border-line px-7 py-4 text-left first:border-t-0";
+  "flex w-full items-center gap-4 border-t border-line py-5 text-left first:border-t-0";
 
 function Row({
   label,
@@ -481,10 +478,6 @@ const CONTROL =
 
 const HEX_INPUT =
   "w-[92px] rounded-md border border-line bg-canvas px-2.5 py-1 text-right font-mono text-ui-sm text-ink-muted outline-none focus:border-accent";
-
-/** 分组的小标题也是一行，所以照样要画分隔线（首行除外）。 */
-const GROUP_HEAD =
-  "border-t border-line px-7 py-2 text-ui-sm text-ink-subtle first:border-t-0";
 
 const BUTTON =
   "rounded-md border border-line bg-canvas px-2.5 py-1 text-ui-sm text-ink-muted transition-colors hover:bg-sunken hover:text-ink";
