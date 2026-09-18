@@ -29,7 +29,8 @@ src/
     registry.tsx      应用注册表（加应用改这里）
     todo/             待办
     docs/             文档中心
-src-tauri/            Rust 侧
+src-tauri/            Rust 侧（icons/ 是从品牌 SVG 生成的，别手改）
+design/               品牌设计源文件与改图标的步骤
 ```
 
 ## 设置

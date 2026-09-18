@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bgA" x1="120" y1="96" x2="892" y2="936" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#172138"/>
+      <stop offset="1" stop-color="#090c13"/>
+    </linearGradient>
+    <linearGradient id="cardA" x1="288" y1="278" x2="730" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfdff"/>
+      <stop offset="1" stop-color="#eaf1ff"/>
+    </linearGradient>
+    <linearGradient id="blueA" x1="170" y1="205" x2="810" y2="830" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#79a8ff"/>
+      <stop offset="1" stop-color="#2867e8"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientTransform="translate(290 220) rotate(42) scale(620)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4f8cff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#4f8cff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadowA" x="120" y="150" width="790" height="770" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="30" stdDeviation="36" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="220" fill="url(#bgA)"/>
+  <rect x="65.5" y="65.5" width="893" height="893" rx="218.5" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="3"/>
+  <rect x="64" y="64" width="896" height="896" rx="220" fill="url(#glowA)"/>
+  <g filter="url(#shadowA)">
+    <g transform="rotate(-11 512 528)">
+      <rect x="218" y="272" width="588" height="512" rx="116" fill="#315fca"/>
+      <rect x="218" y="272" width="588" height="512" rx="116" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="3"/>
+    </g>
+    <g transform="rotate(-4 512 516)">
+      <rect x="218" y="272" width="588" height="512" rx="116" fill="url(#blueA)"/>
+    </g>
+    <g transform="rotate(4 512 504)">
+      <rect x="218" y="272" width="588" height="512" rx="116" fill="url(#cardA)"/>
+      <circle cx="381" cy="397" r="47" fill="#2f6fe4"/>
+      <rect x="326" y="502" width="312" height="48" rx="24" fill="#202838" fill-opacity=".88"/>
+      <rect x="326" y="583" width="210" height="48" rx="24" fill="#202838" fill-opacity=".58"/>
+    </g>
+  </g>
+</svg>
