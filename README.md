@@ -27,20 +27,44 @@ src/
   settings/           设置页（独立页面，左侧设置导航 + 右侧内容）
   apps/
     registry.tsx      应用注册表（加应用改这里）
-    todo/             待办
-    docs/             文档中心
+    loop/             Loop 工作流
+    atlas/            Atlas 文档中心
 src-tauri/            Rust 侧（icons/ 是从品牌 SVG 生成的，别手改）
 design/               品牌设计源文件与改图标的步骤
 ```
 
+Loop 是独立的单人工作流应用，数据只存在 `nib:loop`。列表示卡片在工作流里的位置；
+状态是单值属性，标签是多值属性，两者共用同一套 chip 外观；Loop 的主题无关配置
+也只在自己的设置里，不写进 nib 全局设置。列的增删改序都在 Loop 设置的「看板」里，
+列高跟随窗口，列宽在「显示」里单独配置。
+
+Atlas 是文档导航应用，数据只存在 `nib:atlas`：分组、收藏、搜索都是本地的，文档只存
+标题、网址和备注，点一行就用系统默认浏览器打开；删掉分组只会把文档退回「未分组」。
+
+## 外壳
+
+侧边栏默认是 220px 的展开态，直接显示应用名；点左上角的收起按钮会切成 64px 图标栏，
+名字改走 `title` 提示，再点标题栏左侧的展开按钮即可恢复。上面是应用列表
+（`apps/registry.tsx`），下面固定是「设置」。激活项给一层 `bg-control` 底色，
+跟设置页的导航保持同一套。
+
+注册表里标了 `fullscreen: true` 的页面还支持**页面全屏**（不是窗口全屏）：标题栏右侧那个
+按钮一按，侧边栏整条收起、内容占满整行；`Ctrl+F` 是同一个开关。标题栏左上角会出现一个
+按钮把侧边栏请回来（也就是退出全屏），退出另有 `Ctrl+Shift+F`。全屏只认这两个快捷键和按钮，
+`Esc` 只负责关弹窗，不碰全屏。页面全屏时标题栏顶到窗口左边缘，
+会自己让出 macOS 红绿灯那块地方（80px），不然按钮会钻到红绿灯底下。
+
 ## 设置
 
-侧边栏「设置」或 `⌘,` 打开。设置是独立页面：整窗换掉应用外壳，左边是设置导航
-（顶部「返回应用」），右边是小节卡片，卡片里一行一个设置项。三页：
+侧边栏「设置」打开（默认快捷键是 `⌘,`，在快捷键页里能改）。设置是独立页面：整窗换掉
+应用外壳，左边是设置导航（顶部「返回应用」），右边是小节卡片，卡片里一行一个设置项。
+四页：
 
-- **字体** —— 内容字体（TODO、文档正文这类要读的内容：字体 / 字号 / 字重 / 行高）
+- **字体** —— 内容字体（Loop、文档正文这类要读的内容：字体 / 字号 / 字重 / 行高）
   和系统字体（侧边栏、标题栏、设置界面：字体 / 字号 / 字重）
 - **外观** —— 选预设，再逐项改任意实色；「恢复预设」退回当前预设
+- **快捷键** —— 打开设置、切换页面全屏、退出页面全屏三个动作各自一个快捷键，点键帽
+  直接按新组合录进去，撞车会当场提示；存档在 `nib:shortcuts`
 - **数据** —— 整份配置就是一个 JSON，可以复制、导出 `nib-config.json`、导入覆盖
 
 改的是草稿，边改边生效：立刻写到 `<html>` 上，所以设置页里就能看到效果，但还没落盘。
@@ -62,13 +86,16 @@ design/               品牌设计源文件与改图标的步骤
 可用 token 见 `src/styles.css` 的 `@theme inline` 块：`canvas / surface / raised /
 sunken / sidebar / titlebar / line / line-strong / ink / ink-muted / ink-subtle /
 ink-inverse / accent / accent-hover / accent-active / accent-fg / accent-soft /
-ring / success / warning / danger / info / scrollbar`（状态色另带 `-soft` 变体）。
+ring / control / control-hover / control-active / button / button-hover /
+button-active / focus / success / warning / danger / info / scrollbar`
+（状态色另带 `-soft` 变体）。
 
-半透明色（`accent-soft` / `ring` / 状态色 `-soft`）全部由实色用 `color-mix`
-算出来，不单独配置也不导出——改主色，悬停底色和聚焦圈会自动跟上。
+半透明色（`accent-soft` / `ring` / `control*` / `button*` / 状态色 `-soft`）
+全部由实色用 `color-mix` 算出来，不单独配置也不导出——改正文色或主色，
+按钮、悬停底色和聚焦圈会自动跟上。
 
 内置两套预设取自 Codex 的主题：`everforest`（深色，surface `#2d353b` / accent
-`#a7c080`）和 `github`（浅色，surface `#ffffff` / accent `#0969da`），其余色值
+`#a7c080`）和 `github`（浅色 · Codex，surface `#ffffff` / ink `#1a1c1f`），其余色值
 按同一色阶补全。老配置里的 `dark` / `light` 会自动换成这两套。
 
 新增一套配色：在 `src/styles.css` 加一个 `[data-theme="id"]` 块填满全部实色

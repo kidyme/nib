@@ -7,15 +7,15 @@
  *   2. 把用户手改过的色值内联到 <html>，覆盖预设；
  *   3. 读出当前实际生效的色值，给设置页和导出用。
  *
- * 半透明色（accent-soft / ring / 状态色 -soft）由 CSS 用 color-mix 从实色派生，
- * 所以可以配、可以导出的就是下面 COLOR_TOKENS 这些实色。
+ * 半透明色（accent-soft / ring / control / button / 状态色 -soft）由 CSS 用
+ * color-mix 从实色派生，所以可以配、可以导出的就是下面 COLOR_TOKENS 这些实色。
  */
 
 export type ThemeMode = "light" | "dark";
 
 export const THEMES = [
   { id: "everforest", label: "深色 · Everforest", mode: "dark" },
-  { id: "github", label: "浅色 · GitHub", mode: "light" },
+  { id: "github", label: "浅色 · Codex", mode: "light" },
 ] as const satisfies readonly {
   id: string;
   label: string;
@@ -67,6 +67,11 @@ export type ThemeState = {
 const STORAGE_KEY = "nib:theme";
 /** 出厂预设，「恢复默认配置」也用这一套。 */
 export const DEFAULT_THEME: ThemeId = "everforest";
+/**
+ * 预设色值改版就加一。存下来的是一整份内联色值，是老预设的副本，
+ * 留着会把新预设盖住，所以版本对不上时直接丢掉，只认用户选了哪套。
+ */
+const PRESET_VERSION = 3;
 
 /** 老预设 id：认出来就换成同色系的新预设，别让旧色值留在新预设上。 */
 const LEGACY_THEME_IDS: Record<string, ThemeId | undefined> = {
@@ -91,12 +96,12 @@ function readStored(): { base: ThemeId; colors: Partial<ThemeColors> } {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     if (raw && typeof raw === "object") {
-      const stored = raw as { base?: unknown; colors?: unknown };
-      if (isThemeId(stored.base)) {
-        return { base: stored.base, colors: normalizeColors(stored.colors) ?? {} };
-      }
-      const legacy = typeof stored.base === "string" ? LEGACY_THEME_IDS[stored.base] : undefined;
-      return { base: legacy ?? DEFAULT_THEME, colors: {} };
+      const stored = raw as { base?: unknown; colors?: unknown; version?: unknown };
+      const base = isThemeId(stored.base)
+        ? stored.base
+        : (LEGACY_THEME_IDS[String(stored.base)] ?? DEFAULT_THEME);
+      if (stored.version !== PRESET_VERSION) return { base, colors: {} };
+      return { base, colors: normalizeColors(stored.colors) ?? {} };
     }
   } catch {
     // 存的东西坏了就当没存过，用默认预设。
@@ -149,7 +154,7 @@ export function applyTheme({ base, colors }: ThemeState): void {
 
 /** 保存：把当前配色落盘，下次启动接着用。 */
 export function saveTheme(state: ThemeState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: PRESET_VERSION, ...state }));
 }
 
 /** 渲染之前同步跑，避免首帧闪一下默认配色。 */

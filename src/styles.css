@@ -21,12 +21,27 @@
    system = 界面外壳（侧边栏、标题栏、设置页），content = 应用内容区。
    两套都能在设置里改，改完由 fonts.ts 内联覆盖这几个变量。
    --------------------------------------------------------------------------- */
+/* 内置字体精确到字样，避免 system-ui 在不同环境里挑出不同字体。 */
+@font-face {
+  font-family: "__nib_ui_face";
+  src: local("STHeitiSC-Medium");
+}
+
+@font-face {
+  font-family: "__nib_content_face";
+  src: local("ChalkboardSE-Regular");
+}
+
 :root {
-  --f-ui-family: system-ui;
+  --f-ui-family: "Heiti SC";
+  --f-ui-family-effective: "__nib_ui_face";
+  --f-ui-face: STHeitiSC-Medium;
   --f-ui-size: 14px;
   --f-ui-weight: 400;
 
-  --f-content-family: system-ui;
+  --f-content-family: "Chalkboard SE";
+  --f-content-family-effective: "__nib_content_face";
+  --f-content-face: ChalkboardSE-Regular;
   --f-content-size: 15px;
   --f-content-weight: 400;
   --f-content-leading: 1.65;
@@ -64,6 +79,15 @@
   --color-accent-fg: var(--c-accent-fg);
   --color-accent-soft: var(--c-accent-soft);
   --color-ring: var(--c-ring);
+
+  /* 控件：次级按钮/输入框的轻灰底，主按钮的深色实心底 */
+  --color-control: var(--c-control);
+  --color-control-hover: var(--c-control-hover);
+  --color-control-active: var(--c-control-active);
+  --color-button: var(--c-button);
+  --color-button-hover: var(--c-button-hover);
+  --color-button-active: var(--c-button-active);
+  --color-focus: var(--c-focus);
 
   /* 状态 */
   --color-success: var(--c-success);
@@ -127,42 +151,42 @@
 }
 
 /* ---------------------------------------------------------------------------
-   预设：GitHub（浅）
+   预设：Codex（浅）
    ---------------------------------------------------------------------------
-   同样取自 codex-theme-v1 的浅色（surface #ffffff / ink #1f2328 / accent #0969da），
-   其余按 GitHub 自家色板补全。
+   取自 Codex 浅色主题：白底、gray-50 侧边栏、gray-100 描边，
+   主按钮用正文色而不是 GitHub 蓝。
    --------------------------------------------------------------------------- */
 [data-theme="github"] {
   color-scheme: light;
 
-  --c-canvas: #f6f8fa;
+  --c-canvas: #ffffff;
   --c-surface: #ffffff;
   --c-raised: #ffffff;
-  --c-sunken: #eef1f4;
-  --c-sidebar: #f6f8fa;
+  --c-sunken: #f4f4f4;
+  --c-sidebar: #f9f9f9;
   --c-titlebar: #ffffff;
-  --c-overlay: rgb(31 35 40 / 0.35);
+  --c-overlay: rgb(26 28 31 / 0.2);
 
-  --c-line: #d8dee4;
-  --c-line-strong: #afb8c1;
+  --c-line: #ededed;
+  --c-line-strong: #dfdfdf;
 
-  --c-ink: #1f2328;
-  --c-ink-muted: #59636e;
-  --c-ink-subtle: #818b98;
+  --c-ink: #1a1c1f;
+  --c-ink-muted: #5d5d5d;
+  --c-ink-subtle: #8d8e90;
   --c-ink-inverse: #ffffff;
 
-  --c-accent: #0969da;
-  --c-accent-hover: #0a5fc2;
-  --c-accent-active: #0757ba;
+  --c-accent: #339cff;
+  --c-accent-hover: #0169cc;
+  --c-accent-active: #0057a8;
   --c-accent-fg: #ffffff;
 
-  --c-success: #1a7f37;
-  --c-warning: #9a6700;
-  --c-danger: #cf222e;
-  --c-info: #0969da;
+  --c-success: #00a240;
+  --c-warning: #e25507;
+  --c-danger: #e02e2a;
+  --c-info: #339cff;
 
-  --c-scrollbar: #d8dee4;
-  --c-scrollbar-hover: #afb8c1;
+  --c-scrollbar: #dfdfdf;
+  --c-scrollbar-hover: #cdcdcd;
 }
 
 /* ---------------------------------------------------------------------------
@@ -173,7 +197,16 @@
    --------------------------------------------------------------------------- */
 [data-theme] {
   --c-accent-soft: color-mix(in srgb, var(--c-accent) 14%, transparent);
-  --c-ring: color-mix(in srgb, var(--c-accent) 50%, transparent);
+  --c-focus: var(--c-accent);
+  --c-ring: color-mix(in srgb, var(--c-focus) 50%, transparent);
+
+  --c-control: color-mix(in srgb, var(--c-ink) 5%, transparent);
+  --c-control-hover: color-mix(in srgb, var(--c-ink) 9%, transparent);
+  --c-control-active: color-mix(in srgb, var(--c-ink) 13%, transparent);
+
+  --c-button: var(--c-ink);
+  --c-button-hover: color-mix(in srgb, var(--c-ink) 90%, var(--c-ink-inverse));
+  --c-button-active: color-mix(in srgb, var(--c-ink) 82%, var(--c-ink-inverse));
 
   --c-success-soft: color-mix(in srgb, var(--c-success) 14%, transparent);
   --c-warning-soft: color-mix(in srgb, var(--c-warning) 14%, transparent);
@@ -196,13 +229,14 @@
     margin: 0;
     background-color: var(--c-canvas);
     color: var(--c-ink);
-    font-family: var(--f-ui-family), system-ui, sans-serif;
+    font-family: var(--f-ui-family-effective), system-ui, sans-serif;
     font-size: var(--f-ui-size);
     font-weight: var(--f-ui-weight);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     /* 桌面应用：默认不选中文本，输入控件与显式 .select-text 除外 */
+    -webkit-user-select: none;
     user-select: none;
     overscroll-behavior: none;
   }
@@ -222,7 +256,7 @@
 
   /* 应用内容区：正文用自己那套字体配置，和界面外壳分开 */
   [data-font="content"] {
-    font-family: var(--f-content-family), system-ui, sans-serif;
+    font-family: var(--f-content-family-effective), system-ui, sans-serif;
     font-size: var(--f-content-size);
     font-weight: var(--f-content-weight);
     line-height: var(--f-content-leading);
@@ -259,21 +293,43 @@
 }
 
 @layer components {
-  /* 原生取色器：去掉 WebKit 的默认外框，只留一个圆角色块 */
-  .color-input {
-    appearance: none;
-    border: none;
-    background: none;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .color-input::-webkit-color-swatch-wrapper {
-    padding: 0;
-  }
-
-  .color-input::-webkit-color-swatch {
+  /* 色块：点开的是自己的调色面板，不再用系统取色器 */
+  .color-swatch {
     border: 1px solid var(--c-line-strong);
     border-radius: 6px;
+    cursor: pointer;
+    transition: box-shadow 120ms ease;
+  }
+
+  .color-swatch:hover {
+    box-shadow: 0 0 0 3px var(--c-control);
+  }
+
+  .color-swatch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--c-ring);
+  }
+
+  /* react-colorful 自带的样式是写死的浅色尺寸，这里按面板重排一遍 */
+  .color-panel .react-colorful {
+    width: 100%;
+    height: 160px;
+    gap: 10px;
+  }
+
+  .color-panel .react-colorful__saturation {
+    border-radius: 8px;
+    border-bottom: none;
+  }
+
+  .color-panel .react-colorful__hue {
+    height: 12px;
+    border-radius: 999px;
+  }
+
+  .color-panel .react-colorful__pointer {
+    width: 16px;
+    height: 16px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
   }
 }
