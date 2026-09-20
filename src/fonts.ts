@@ -42,20 +42,28 @@ export const UI_SCALES = [
   { value: 1.5, label: "150%" },
 ] as const;
 
-/** 拿不到系统字体列表时（浏览器里跑 vite、调用失败）的兜底。 */
-export const FONT_FACES: FontFace[] = [
-  {
-    postScriptName: "ChalkboardSE-Regular",
-    family: "Chalkboard SE",
-    styleName: "Regular",
-    displayName: "Chalkboard SE Regular",
-  },
+/**
+ * 内置字样：出厂默认的界面字体和内容字体就是这两个，macOS 自带。
+ * 系统字体列表读不到（浏览器里跑 vite、调用失败）时照样能选。
+ */
+export const BUILTIN_FACES: FontFace[] = [
   {
     postScriptName: "STHeitiSC-Medium",
     family: "Heiti SC",
     styleName: "Medium",
     displayName: "Heiti SC Medium",
   },
+  {
+    postScriptName: "ChalkboardSE-Regular",
+    family: "Chalkboard SE",
+    styleName: "Regular",
+    displayName: "Chalkboard SE Regular",
+  },
+];
+
+/** 拿不到系统字体列表时（浏览器里跑 vite、调用失败）的兜底。 */
+export const FONT_FACES: FontFace[] = [
+  ...BUILTIN_FACES,
   {
     postScriptName: "PingFangSC-Regular",
     family: "PingFang SC",
@@ -109,11 +117,11 @@ export const DEFAULT_FONTS: FontSettings = {
   content: {
     family: "Chalkboard SE",
     face: { postScriptName: "ChalkboardSE-Regular" },
-    size: 15,
+    size: 16,
     weight: 400,
-    leading: 1.65,
+    leading: 2,
   },
-  scale: 1,
+  scale: 1.25,
 };
 
 export const FONT_WEIGHTS = [
@@ -133,10 +141,19 @@ const FACE_ALIASES: Record<FontRole, string> = {
 
 let installedFonts: Promise<FontFace[]> | undefined;
 
-/** 本机已安装的全部 font face，只问系统一次。 */
+/** 内置字样排在最前：系统列表里没有，或者淹在几百项里，都能第一眼找到。 */
+export function withBuiltinFaces(faces: FontFace[]): FontFace[] {
+  return [...BUILTIN_FACES, ...faces.filter((face) => !isBuiltinFace(face.postScriptName))];
+}
+
+export function isBuiltinFace(postScriptName: string | undefined): boolean {
+  return BUILTIN_FACES.some((face) => face.postScriptName === postScriptName);
+}
+
+/** 本机已安装的全部 font face，只问系统一次；内置的两项永远在里面。 */
 export function loadFontFaces(): Promise<FontFace[]> {
   installedFonts ??= invoke<FontFace[]>("list_fonts")
-    .then((faces) => (faces.length > 0 ? faces : FONT_FACES))
+    .then((faces) => withBuiltinFaces(faces.length > 0 ? faces : FONT_FACES))
     .catch(() => FONT_FACES);
   return installedFonts;
 }
@@ -249,14 +266,37 @@ export function initFonts(): void {
   }
   try {
     const fonts = JSON.parse(stored) as FontSettings;
-    // 旧版本存的就是旧的 system-ui 默认值；改内置默认后让这批用户也跟着换新默认。
-    const legacyDefaults: FontSettings = {
-      ui: { family: SYSTEM_FAMILY, size: 14, weight: 400, leading: 1.5 },
-      content: { family: SYSTEM_FAMILY, size: 15, weight: 400, leading: 1.65 },
-      scale: 1,
-    };
+    // 存下来的正好是某一版的出厂默认值，说明这个用户没自己调过，跟着换成新的；
+    // 真改过（哪怕只改一项）就原样留着，别把人的配置冲掉。
+    const legacyDefaults: FontSettings[] = [
+      // 最早那版：界面和内容都是 system-ui。
+      {
+        ui: { family: SYSTEM_FAMILY, size: 14, weight: 400, leading: 1.5 },
+        content: { family: SYSTEM_FAMILY, size: 15, weight: 400, leading: 1.65 },
+        scale: 1,
+      },
+      // 换成内置两套字体、但字号和缩放还是旧值的那版。
+      {
+        ui: {
+          family: "Heiti SC",
+          face: { postScriptName: "STHeitiSC-Medium" },
+          size: 14,
+          weight: 400,
+          leading: 1.5,
+        },
+        content: {
+          family: "Chalkboard SE",
+          face: { postScriptName: "ChalkboardSE-Regular" },
+          size: 15,
+          weight: 400,
+          leading: 1.65,
+        },
+        scale: 1,
+      },
+    ];
+    const storedJson = JSON.stringify(fonts);
     applyFonts(
-      JSON.stringify(fonts) === JSON.stringify(legacyDefaults) ? DEFAULT_FONTS : fonts,
+      legacyDefaults.some((item) => JSON.stringify(item) === storedJson) ? DEFAULT_FONTS : fonts,
     );
   } catch {
     applyFonts(DEFAULT_FONTS);

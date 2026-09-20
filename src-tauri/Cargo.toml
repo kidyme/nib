@@ -1,6 +1,6 @@
 [package]
 name = "nib"
-version = "0.1.0"
+version = "1.0.0"
 description = "macOS 个人工作台"
 authors = ["you"]
 edition = "2021"

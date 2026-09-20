@@ -1,7 +1,9 @@
 import type { ComponentType } from "react";
-import { BookIcon, LoopIcon } from "../shell/icons";
+import { LoopIcon } from "../shell/icons";
 import { LoopApp } from "./loop/LoopApp";
-import { AtlasApp } from "./atlas/AtlasApp";
+// Atlas 还在开发中，先不注册，代码留在 apps/atlas 等做完再挂回来：
+// import { BookIcon } from "../shell/icons";
+// import { AtlasApp } from "./atlas/AtlasApp";
 
 export type AppDefinition = {
   id: string;
@@ -15,7 +17,8 @@ export type AppDefinition = {
 /** 侧边栏里的应用列表。加新应用 = 在这里加一项，其余不用动。 */
 export const APPS: AppDefinition[] = [
   { id: "loop", name: "Loop", icon: LoopIcon, component: LoopApp, fullscreen: true },
-  { id: "atlas", name: "Atlas", icon: BookIcon, component: AtlasApp, fullscreen: true },
+  // 开发中的 Atlas 不挂出来（放开下面这行就回来了）：
+  // { id: "atlas", name: "Atlas", icon: BookIcon, component: AtlasApp, fullscreen: true },
 ];
 
 export const DEFAULT_APP_ID = APPS[0].id;

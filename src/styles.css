@@ -42,9 +42,9 @@
   --f-content-family: "Chalkboard SE";
   --f-content-family-effective: "__nib_content_face";
   --f-content-face: ChalkboardSE-Regular;
-  --f-content-size: 15px;
+  --f-content-size: 16px;
   --f-content-weight: 400;
-  --f-content-leading: 1.65;
+  --f-content-leading: 2;
 }
 
 @theme inline {

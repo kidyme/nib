@@ -19,6 +19,7 @@ import {
   SYSTEM_FAMILY,
   UI_SCALES,
   applyFonts,
+  isBuiltinFace,
   loadFontFaces,
   normalizeFonts,
   type FontFace,
@@ -518,7 +519,10 @@ function FontPicker({
     { key: SYSTEM_FAMILY, label: "系统默认", search: "系统默认 system-ui" },
     ...availableFaces.map((face) => ({
       key: face.postScriptName,
-      label: faceLabel(face),
+      // 内置的两项标出来：它们是出厂默认，和「本机装的字体」不是一回事。
+      label: isBuiltinFace(face.postScriptName)
+        ? `${faceLabel(face)}（内置）`
+        : faceLabel(face),
       search: [face.family, face.styleName, face.displayName, face.postScriptName].join(" "),
       face,
     })),
