@@ -7,7 +7,5 @@
     <rect x="202" y="222" width="548" height="532" rx="142" fill="#17191c"/>
     <path d="M350 650 626 286c17-22 49-26 71-9l46 36c22 17 26 49 9 71L476 748c-17 22-49 26-71 9l-46-36c-22-17-26-49-9-71Z" fill="#f5f2e9"/>
     <path d="M626 286 752 670 476 748l150-462Z" fill="#a7c080"/>
-    <circle cx="594" cy="494" r="44" fill="#17191c"/>
-    <path d="M626 530 706 626" fill="none" stroke="#17191c" stroke-width="34" stroke-linecap="round"/>
   </g>
 </svg>
