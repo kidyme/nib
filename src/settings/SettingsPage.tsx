@@ -130,8 +130,19 @@ export function SettingsPage({ theme, fonts, shortcuts, onBack, onSave }: Settin
   }, [onBack]);
 
   const goToSection = (id: string) => {
+    const section = document.getElementById(id);
+    const container = scrollRef.current;
+    if (!section || !container) return;
+
     setActiveSection(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // scrollIntoView 在临界位置可能停得不够准，导致滚动跟随又把高亮抢回上一项。
+    // 这里直接按 scroll-mt 计算目标位置，保证滚动结束后高亮和点击项一致。
+    const targetTop =
+      section.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      72;
+    container.scrollTo({ top: targetTop, behavior: "smooth" });
   };
 
   // 滚动时反查当前区块，让左侧子导航保持 VSCode 那种跟随高亮。

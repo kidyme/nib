@@ -9,6 +9,9 @@ use objc2_core_text::{
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +20,21 @@ struct FontFace {
     family: String,
     style_name: String,
     display_name: String,
+}
+
+/// 把前端给的 JSON 固定写到桌面。文件名只接受最后一段，避免路径注入。
+#[tauri::command]
+fn export_json_to_desktop(filename: String, contents: String) -> Result<String, String> {
+    let name = Path::new(&filename)
+        .file_name()
+        .filter(|name| Path::new(name).extension() == Some(OsStr::new("json")))
+        .ok_or_else(|| "文件名必须是 JSON".to_string())?;
+    let home = std::env::var_os("HOME").ok_or_else(|| "找不到用户目录".to_string())?;
+    let desktop = PathBuf::from(home).join("Desktop");
+    fs::create_dir_all(&desktop).map_err(|error| error.to_string())?;
+    let path = desktop.join(name);
+    fs::write(&path, contents).map_err(|error| error.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn descriptor_string(descriptor: &CTFontDescriptor, attribute: &CFString) -> Option<String> {
@@ -87,7 +105,7 @@ fn list_fonts() -> Vec<FontFace> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![list_fonts])
+        .invoke_handler(tauri::generate_handler![list_fonts, export_json_to_desktop])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

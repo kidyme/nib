@@ -17,6 +17,7 @@ import {
   type LoopData,
   type LoopOption,
 } from "./model";
+import { exportJsonFile } from "../../shell/exportFile";
 import { CONTROL, ICON_BUTTON, Modal, Chip } from "./ui";
 
 export type LoopSettingsTab = "board" | "statuses" | "labels" | "display" | "data";
@@ -463,14 +464,13 @@ function DataSettings({
     setStatus({ text: "已复制 Loop 数据" });
   };
 
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "nib-loop.json";
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatus({ text: "已导出 nib-loop.json" });
+  const download = async () => {
+    try {
+      const path = await exportJsonFile("nib-loop.json", json);
+      setStatus({ text: path ? "已导出到桌面" : "已导出 nib-loop.json" });
+    } catch {
+      setStatus({ text: "导出失败", error: true });
+    }
   };
 
   const importFile = async (file: File) => {
@@ -512,7 +512,7 @@ function DataSettings({
         </button>
         <button
           type="button"
-          onClick={download}
+          onClick={() => void download()}
           className="h-8 rounded-lg bg-control px-3 text-[0.84em] font-medium text-ink transition-colors hover:bg-control-hover"
         >
           导出

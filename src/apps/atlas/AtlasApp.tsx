@@ -1,581 +1,161 @@
 import {
+  useCallback,
   useEffect,
-  useId,
+  useRef,
   useState,
   type FormEvent,
-  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
-import { createPortal } from "react-dom";
-import { openExternalUrl, normalizeExternalUrl } from "../../shell/openExternal";
-import {
-  BookIcon,
-  ChevronDownIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  PlusIcon,
-  SearchIcon,
-  TrashIcon,
-} from "../../shell/icons";
+import { PencilIcon, SlidersIcon } from "../../shell/icons";
+import { normalizeExternalUrl, openExternalUrl } from "../../shell/openExternal";
+import { exportJsonFile } from "../../shell/exportFile";
 import {
   createId,
-  docsInGroup,
+  findCategory,
+  moveLink,
+  normalizeAtlasData,
   readAtlasData,
   saveAtlasData,
+  type AtlasCategory,
   type AtlasData,
-  type AtlasDoc,
-  type AtlasGroup,
+  type AtlasLink,
+  MAX_CARD_WIDTH,
+  MIN_CARD_WIDTH,
 } from "./model";
 
-type Filter =
-  | { kind: "all" }
-  | { kind: "favorite" }
-  | { kind: "ungrouped" }
-  | { kind: "group"; id: string };
+/* ---------------------------------------------------------------------------
+   共用样式片段
+   --------------------------------------------------------------------------- */
+const TEXT_BUTTON =
+  "inline-flex h-7.5 shrink-0 items-center justify-center rounded-lg px-2 text-ui-sm font-semibold text-ink-subtle transition-colors duration-150 hover:bg-raised hover:text-ink";
+const DANGER_BUTTON = `${TEXT_BUTTON} hover:bg-danger-soft hover:text-danger`;
+const OUTLINE_BUTTON =
+  "flex h-9.5 w-full items-center justify-center rounded-[0.5625rem] border border-dashed border-line/50 bg-surface/20 text-ui-sm font-semibold text-ink-subtle transition-colors duration-150 hover:border-line hover:bg-raised/50 hover:text-ink";
+const HEADER_BUTTON =
+  "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-[0.8em] font-medium leading-none text-ink-muted transition-colors duration-150 hover:bg-control hover:text-ink";
+const HEADER_ICON_BUTTON = `${HEADER_BUTTON} w-7 px-0`;
+const HEADER_BUTTON_ACTIVE = "bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent";
+const FIELD_LABEL = "grid gap-1.5 text-ui-xs font-semibold text-ink-muted";
+const FIELD_INPUT =
+  "h-9 w-full rounded-lg border border-line bg-sunken px-2.5 text-ui text-ink outline-none transition-colors placeholder:text-ink-subtle focus:border-accent";
 
-type Editor = { mode: "new" } | { mode: "edit"; docId: string };
+/* ---------------------------------------------------------------------------
+   拖动：命中探测
+   --------------------------------------------------------------------------- */
+type DropTarget = {
+  categoryId: string;
+  /** 插到目标分类的第几个之前；越界由 moveLink 夹住 */
+  index: number;
+  /** 指针压在"拖到这里"上 */
+  tail: boolean;
+};
 
-const NAV_ITEM =
-  "flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[0.82em] transition-colors";
-const NAV_IDLE = "text-ink-muted hover:bg-control hover:text-ink";
-const NAV_ACTIVE = "bg-control font-medium text-ink";
+type DropProbe =
+  /** 指针就在占位块自己身上：保持当前槽位，别抖 */
+  | { kind: "self" }
+  /** 落在某个分类的格子里 */
+  | { kind: "inside"; target: DropTarget }
+  /** 落在所有分类之外：松手就当取消 */
+  | { kind: "outside" };
 
-export function AtlasApp() {
-  const [data, setData] = useState<AtlasData>(readAtlasData);
-  const [filter, setFilter] = useState<Filter>({ kind: "all" });
-  const [query, setQuery] = useState("");
-  const [editor, setEditor] = useState<Editor | null>(null);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+function dropProbeAt(x: number, y: number, linkId: string): DropProbe {
+  const hit = document.elementFromPoint(x, y);
+  if (!hit) return { kind: "outside" };
 
-  useEffect(() => {
-    saveAtlasData(data);
-  }, [data]);
+  const linkElement = hit.closest<HTMLElement>("[data-atlas-link]");
+  if (linkElement) {
+    if (linkElement.dataset.atlasLink === linkId) return { kind: "self" };
+    const section = linkElement.closest<HTMLElement>("[data-atlas-category]");
+    const categoryId = section?.dataset.atlasCategory;
+    if (!categoryId) return { kind: "outside" };
+    const grid = linkElement.parentElement;
+    const siblings = grid
+      ? Array.from(grid.children).filter((child) => child.hasAttribute("data-atlas-link"))
+      : [];
+    const rect = linkElement.getBoundingClientRect();
+    const after = x >= rect.left + rect.width / 2;
+    return {
+      kind: "inside",
+      target: {
+        categoryId,
+        index: Math.max(0, siblings.indexOf(linkElement) + (after ? 1 : 0)),
+        tail: false,
+      },
+    };
+  }
 
-  const editingDoc =
-    editor?.mode === "edit" ? data.docs.find((doc) => doc.id === editor.docId) : undefined;
-  const editingGroup = data.groups.find((group) => group.id === editingGroupId);
+  const tailElement = hit.closest<HTMLElement>("[data-atlas-tail]");
+  const tailCategoryId = tailElement?.dataset.atlasTail;
+  if (tailCategoryId) {
+    return {
+      kind: "inside",
+      target: { categoryId: tailCategoryId, index: Number.MAX_SAFE_INTEGER, tail: true },
+    };
+  }
 
-  const addDoc = (doc: Omit<AtlasDoc, "id">) => {
-    setData((current) => ({ ...current, docs: [...current.docs, { ...doc, id: createId("doc") }] }));
-  };
+  // 分类的标题行、格子的空隙：都算"放到这个分类末尾"
+  const section = hit.closest<HTMLElement>("[data-atlas-category]");
+  const sectionCategoryId = section?.dataset.atlasCategory;
+  if (sectionCategoryId) {
+    return {
+      kind: "inside",
+      target: { categoryId: sectionCategoryId, index: Number.MAX_SAFE_INTEGER, tail: false },
+    };
+  }
 
-  const patchDoc = (docId: string, patch: Partial<AtlasDoc>) => {
-    setData((current) => ({
-      ...current,
-      docs: current.docs.map((doc) => (doc.id === docId ? { ...doc, ...patch } : doc)),
-    }));
-  };
-
-  const deleteDoc = (docId: string) => {
-    setData((current) => ({ ...current, docs: current.docs.filter((doc) => doc.id !== docId) }));
-    setEditor(null);
-  };
-
-  const saveGroup = (name: string, groupId?: string) => {
-    setData((current) => groupId
-      ? {
-          ...current,
-          groups: current.groups.map((group) =>
-            group.id === groupId ? { ...group, name } : group
-          ),
-        }
-      : {
-          ...current,
-          groups: [...current.groups, { id: createId("group"), name }],
-        });
-  };
-
-  const deleteGroup = (groupId: string) => {
-    setData((current) => ({
-      ...current,
-      groups: current.groups.filter((group) => group.id !== groupId),
-      docs: current.docs.map((doc) =>
-        doc.groupId === groupId ? { ...doc, groupId: null } : doc
-      ),
-    }));
-    setEditingGroupId(null);
-    setFilter({ kind: "all" });
-  };
-
-  const defaultGroupId = filter.kind === "group" ? filter.id : null;
-  const title =
-    filter.kind === "all" ? "全部文档"
-      : filter.kind === "favorite" ? "收藏"
-        : filter.kind === "ungrouped" ? "未分组"
-          : editingGroupName(data.groups, filter.id);
-
-  const filtered = filterDocs(data, filter, query);
-  const hasAnyDoc = data.docs.length > 0;
-
-  return (
-    <div data-font="content" className="flex h-full min-h-0 overflow-hidden">
-      <aside className="flex w-[12.5rem] shrink-0 flex-col border-r border-line bg-sunken">
-        <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-          <NavItem active={filter.kind === "all"} label="全部" count={data.docs.length}
-            onClick={() => setFilter({ kind: "all" })} />
-          <NavItem active={filter.kind === "favorite"} label="收藏"
-            count={data.docs.filter((doc) => doc.favorite).length}
-            onClick={() => setFilter({ kind: "favorite" })} />
-          <NavItem active={filter.kind === "ungrouped"} label="未分组"
-            count={docsInGroup(data.docs, null).length}
-            onClick={() => setFilter({ kind: "ungrouped" })} />
-
-          <div className="mt-4 flex h-8 items-center gap-2 px-2.5">
-            <span className="min-w-0 flex-1 text-[0.74em] font-semibold text-ink-subtle">分组</span>
-            <button
-              type="button"
-              title="新建分组"
-              aria-label="新建分组"
-              onClick={() => setEditingGroupId("")}
-              className="flex size-6 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-control hover:text-ink"
-            >
-              <PlusIcon className="size-3.5" />
-            </button>
-          </div>
-
-          {data.groups.map((group) => {
-            const active = filter.kind === "group" && filter.id === group.id;
-            return (
-              <div key={group.id} className="group flex items-center gap-1">
-                <div className="min-w-0 flex-1">
-                  <NavItem active={active} label={group.name}
-                    count={docsInGroup(data.docs, group.id).length}
-                    onClick={() => setFilter({ kind: "group", id: group.id })} />
-                </div>
-                <button
-                  type="button"
-                  title="管理分组"
-                  aria-label={`管理分组 ${group.name}`}
-                  onClick={() => setEditingGroupId(group.id)}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-subtle opacity-0 transition-opacity hover:bg-control hover:text-ink group-hover:opacity-100"
-                >
-                  <MoreHorizontalIcon className="size-3.5" />
-                </button>
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
-
-      <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center gap-3 px-4">
-          <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            <h1 className="truncate text-[0.86em] font-semibold text-ink">{title}</h1>
-            <span className="shrink-0 text-[0.76em] text-ink-subtle">{filtered.length} 篇</span>
-          </div>
-          <label className="flex h-8 w-[13rem] shrink-0 items-center gap-2 rounded-lg border border-line bg-canvas px-2.5 text-ink-muted transition-colors focus-within:border-focus">
-            <SearchIcon className="size-3.5 shrink-0" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索文档"
-              className="min-w-0 flex-1 bg-transparent text-[0.82em] text-ink outline-none placeholder:text-ink-subtle"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => setEditor({ mode: "new" })}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-button px-3 text-[0.82em] font-medium text-ink-inverse transition-colors hover:bg-button-hover"
-          >
-            <PlusIcon className="size-3.5" />
-            新建文档
-          </button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-1">
-          {filtered.length > 0 ? (
-            <div className="space-y-2">
-              {filtered.map((doc) => (
-                <DocRow
-                  key={doc.id}
-                  doc={doc}
-                  group={data.groups.find((group) => group.id === doc.groupId)}
-                  onToggleFavorite={() => patchDoc(doc.id, { favorite: !doc.favorite })}
-                  onEdit={() => setEditor({ mode: "edit", docId: doc.id })}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              showAction={!hasAnyDoc || filter.kind !== "all"}
-              actionLabel={hasAnyDoc ? "新建文档" : "收录第一篇文档"}
-              hint={query
-                ? "没有匹配的文档，换个关键词试试。"
-                : filter.kind === "favorite"
-                  ? "还没有收藏。点文档左侧的星标就会收在这里。"
-                  : "把常看的文档和链接收进来，分组、搜索，点一下用默认浏览器打开。"}
-              onAction={() => setEditor({ mode: "new" })}
-            />
-          )}
-        </div>
-      </section>
-
-      {(editor?.mode === "new" || editingDoc) && (
-        <DocDialog
-          doc={editingDoc}
-          groups={data.groups}
-          defaultGroupId={defaultGroupId}
-          onSubmit={(doc) => {
-            if (editingDoc) {
-              patchDoc(editingDoc.id, doc);
-            } else {
-              addDoc(doc);
-              // 新建后跳到它落下的分组，避免在「收藏」或搜索里刚保存就消失。
-              setQuery("");
-              setFilter(doc.groupId ? { kind: "group", id: doc.groupId } : { kind: "ungrouped" });
-            }
-            setEditor(null);
-          }}
-          onDelete={editingDoc ? () => deleteDoc(editingDoc.id) : undefined}
-          onClose={() => setEditor(null)}
-        />
-      )}
-
-      {editingGroupId !== null && (
-        <GroupDialog
-          group={editingGroup}
-          onSubmit={(name) => {
-            saveGroup(name, editingGroup?.id);
-            setEditingGroupId(null);
-          }}
-          onDelete={editingGroup ? () => deleteGroup(editingGroup.id) : undefined}
-          onClose={() => setEditingGroupId(null)}
-        />
-      )}
-    </div>
-  );
+  return { kind: "outside" };
 }
 
-function editingGroupName(groups: AtlasGroup[], id: string): string {
-  return groups.find((group) => group.id === id)?.name ?? "全部文档";
+/* ---------------------------------------------------------------------------
+   拖动：状态
+   --------------------------------------------------------------------------- */
+type DragState = {
+  linkId: string;
+  title: string;
+  pointerId: number;
+  x: number;
+  y: number;
+  /** 源项的宽度，浮层跟着它 */
+  width: number;
+  /** 指针真的动过：没动过就当普通点击，什么都不做 */
+  moved: boolean;
+  /** 最近一次算出来的落点；null = 松手会取消 */
+  target: DropTarget | null;
+  /** 拖动开始时的整棵树，取消时原样放回去 */
+  snapshot: AtlasData;
+};
+
+/** 浮层高度 = 行高，用来做贴边翻转 */
+const GHOST_HEIGHT = 52;
+const GHOST_GAP = 14;
+
+function ghostOffset(drag: DragState) {
+  let left = drag.x + GHOST_GAP;
+  let top = drag.y + GHOST_GAP;
+  if (left + drag.width > window.innerWidth - 8) left = drag.x - drag.width - GHOST_GAP;
+  if (top + GHOST_HEIGHT > window.innerHeight - 8) top = drag.y - GHOST_HEIGHT - GHOST_GAP;
+  return { left, top };
 }
 
-function filterDocs(data: AtlasData, filter: Filter, query: string): AtlasDoc[] {
-  const keyword = query.trim().toLowerCase();
-  return data.docs.filter((doc) => {
-    if (filter.kind === "favorite" && !doc.favorite) return false;
-    if (filter.kind === "ungrouped" && doc.groupId !== null) return false;
-    if (filter.kind === "group" && doc.groupId !== filter.id) return false;
-    if (!keyword) return true;
-    return [doc.title, doc.url, doc.note].some((value) => value.toLowerCase().includes(keyword));
-  });
-}
-
-function NavItem({
-  active,
-  label,
-  count,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  count: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      onClick={onClick}
-      className={`${NAV_ITEM} ${active ? NAV_ACTIVE : NAV_IDLE}`}
-    >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="shrink-0 text-[0.86em] tabular-nums text-ink-subtle">{count}</span>
-    </button>
-  );
-}
-
-function DocRow({
-  doc,
-  group,
-  onToggleFavorite,
-  onEdit,
-}: {
-  doc: AtlasDoc;
-  group?: AtlasGroup;
-  onToggleFavorite: () => void;
-  onEdit: () => void;
-}) {
-  const host = hostOf(doc.url);
-  const meta = [host, group?.name, doc.note].filter(Boolean).join("  ·  ");
-
-  return (
-    <div className="group flex items-center gap-1 rounded-xl border border-line bg-surface px-2 py-1.5 transition-colors hover:border-line-strong">
-      <button
-        type="button"
-        title={doc.favorite ? "取消收藏" : "收藏"}
-        aria-label={doc.favorite ? "取消收藏" : "收藏"}
-        aria-pressed={doc.favorite}
-        onClick={onToggleFavorite}
-        className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-          doc.favorite ? "text-warning" : "text-ink-subtle hover:bg-control hover:text-ink"
-        }`}
-      >
-        <StarIcon className="size-4" filled={doc.favorite} />
-      </button>
-
-      <button
-        type="button"
-        title={`在默认浏览器打开 ${doc.url}`}
-        onClick={() => { void openExternalUrl(doc.url); }}
-        className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-control"
-      >
-        <p className="truncate text-[0.88em] font-medium leading-5 text-ink">{doc.title}</p>
-        <p className="truncate text-[0.76em] leading-4 text-ink-muted">{meta}</p>
-      </button>
-
-      <button
-        type="button"
-        title="编辑文档"
-        aria-label={`编辑 ${doc.title}`}
-        onClick={onEdit}
-        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-subtle opacity-0 transition-[background-color,opacity] hover:bg-control hover:text-ink group-hover:opacity-100"
-      >
-        <PencilIcon className="size-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function EmptyState({
-  showAction,
-  actionLabel,
-  hint,
-  onAction,
-}: {
-  showAction: boolean;
-  actionLabel: string;
-  hint: string;
-  onAction: () => void;
-}) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-10 pb-10 text-center">
-      <div className="flex size-11 items-center justify-center rounded-xl border border-line bg-surface">
-        <BookIcon className="size-5 text-ink-subtle" />
-      </div>
-      <p className="max-w-xs text-[0.9em] leading-6 text-ink-muted">{hint}</p>
-      {showAction && (
-        <button
-          type="button"
-          onClick={onAction}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-button px-3 text-[0.82em] font-medium text-ink-inverse transition-colors hover:bg-button-hover"
-        >
-          <PlusIcon className="size-3.5" />
-          {actionLabel}
-        </button>
-      )}
-    </div>
-  );
-}
+/* ---------------------------------------------------------------------------
+   文档弹窗
+   --------------------------------------------------------------------------- */
+type DocDraft = { mode: "add" } | { mode: "edit"; link: AtlasLink };
 
 function DocDialog({
-  doc,
-  groups,
-  defaultGroupId,
-  onSubmit,
-  onDelete,
+  draft,
+  categoryId,
   onClose,
+  onSubmit,
 }: {
-  doc?: AtlasDoc;
-  groups: AtlasGroup[];
-  defaultGroupId: string | null;
-  onSubmit: (doc: Omit<AtlasDoc, "id">) => void;
-  onDelete?: () => void;
+  draft: DocDraft;
+  /** 弹窗从哪个分类的点进来，文档就归哪个分类；换分类去主页面拖。 */
+  categoryId: string;
   onClose: () => void;
+  /** 返回错误文案表示没通过，返回 null 表示已保存 */
+  onSubmit: (values: { title: string; url: string; categoryId: string }) => string | null;
 }) {
-  const [title, setTitle] = useState(doc?.title ?? "");
-  const [url, setUrl] = useState(doc?.url ?? "");
-  const [groupId, setGroupId] = useState(doc?.groupId ?? defaultGroupId);
-  const [note, setNote] = useState(doc?.note ?? "");
   const [error, setError] = useState("");
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const normalizedUrl = normalizeExternalUrl(url);
-    if (!normalizedUrl) {
-      setError("请填一个 http(s) 链接。");
-      return;
-    }
-    onSubmit({
-      title: title.trim() || hostOf(normalizedUrl),
-      url: normalizedUrl,
-      groupId,
-      note: note.trim(),
-      favorite: doc?.favorite ?? false,
-    });
-  };
-
-  return (
-    <Modal title={doc ? "编辑文档" : "新建文档"} onClose={onClose}>
-      <form onSubmit={submit} className="p-5">
-        <Field label="标题">
-          <input
-            autoFocus
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder={url ? undefined : "留空的话用网址域名"}
-            className={CONTROL}
-          />
-        </Field>
-        <Field label="链接">
-          <input
-            value={url}
-            onChange={(event) => { setUrl(event.target.value); setError(""); }}
-            placeholder="https://"
-            className={CONTROL}
-          />
-          {error && <p className="mt-1.5 text-[0.78em] text-danger">{error}</p>}
-        </Field>
-        <Field label="分组">
-          <Select value={groupId ?? ""} onChange={(value) => setGroupId(value || null)}>
-            <option value="">未分组</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>{group.name}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="备注">
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            rows={3}
-            placeholder="为什么收它、看到哪了……"
-            className={`${CONTROL} h-auto resize-none py-2 leading-5`}
-          />
-        </Field>
-
-        <div className="mt-6 flex items-center gap-2">
-          {onDelete && (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(`删除「${doc?.title}」？`)) onDelete();
-              }}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.84em] font-medium text-danger transition-colors hover:bg-danger-soft"
-            >
-              <TrashIcon className="size-3.5" />
-              删除
-            </button>
-          )}
-          <button type="button" onClick={onClose}
-            className="ml-auto h-8 rounded-lg px-3 text-[0.84em] text-ink-muted transition-colors hover:bg-control hover:text-ink">
-            取消
-          </button>
-          <button type="submit"
-            className="h-8 rounded-lg bg-button px-3.5 text-[0.84em] font-medium text-ink-inverse transition-colors hover:bg-button-hover">
-            保存
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function GroupDialog({
-  group,
-  onSubmit,
-  onDelete,
-  onClose,
-}: {
-  group?: AtlasGroup;
-  onSubmit: (name: string) => void;
-  onDelete?: () => void;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(group?.name ?? "");
-  const trimmed = name.trim();
-
-  return (
-    <Modal title={group ? "管理分组" : "新建分组"} size="sm" onClose={onClose}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (trimmed) onSubmit(trimmed);
-        }}
-        className="p-5"
-      >
-        <Field label="名称">
-          <input
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className={CONTROL}
-          />
-        </Field>
-        <div className="mt-6 flex items-center gap-2">
-          {onDelete && (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(`删除分组「${group?.name}」？组里的文档会退回未分组。`)) onDelete();
-              }}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.84em] font-medium text-danger transition-colors hover:bg-danger-soft"
-            >
-              <TrashIcon className="size-3.5" />
-              删除
-            </button>
-          )}
-          <button type="button" onClick={onClose}
-            className="ml-auto h-8 rounded-lg px-3 text-[0.84em] text-ink-muted transition-colors hover:bg-control hover:text-ink">
-            取消
-          </button>
-          <button type="submit" disabled={!trimmed}
-            className="h-8 rounded-lg bg-button px-3.5 text-[0.84em] font-medium text-ink-inverse transition-colors hover:bg-button-hover disabled:opacity-40">
-            保存
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-const CONTROL =
-  "h-8 w-full rounded-lg border border-line bg-canvas px-2.5 text-[0.86em] text-ink outline-none transition-colors placeholder:text-ink-subtle hover:border-line-strong focus:border-focus";
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="mb-4 block text-[0.84em] font-medium text-ink-muted last:mb-0">
-      <span className="mb-1.5 block">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-/** 自绘下拉：macOS 原生 select 的样式跟主题不搭，箭头也去不掉。 */
-function Select({
-  value,
-  onChange,
-  children,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <span className="relative block">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`${CONTROL} appearance-none pr-8`}
-      >
-        {children}
-      </select>
-      <ChevronDownIcon className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-subtle" />
-    </span>
-  );
-}
-
-function Modal({
-  title,
-  size = "md",
-  onClose,
-  children,
-}: {
-  title: string;
-  size?: "sm" | "md";
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const titleId = useId();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -585,49 +165,739 @@ function Modal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  return createPortal(
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const message = onSubmit({
+      title: String(form.get("title") ?? ""),
+      url: String(form.get("url") ?? ""),
+      categoryId,
+    });
+    setError(message ?? "");
+  };
+
+  const link = draft.mode === "edit" ? draft.link : null;
+
+  return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={`w-full ${size === "sm" ? "max-w-[26.875rem]" : "max-w-[34rem]"} overflow-hidden rounded-xl border border-line bg-surface shadow-2xl`}
+      <form
+        onSubmit={submit}
+        className="w-full max-w-[27.5rem] overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
       >
-        <header className="border-b border-line px-5 py-4">
-          <h2 id={titleId} className="text-[1.05em] font-semibold text-ink">{title}</h2>
+        <header className="flex h-12 items-center justify-between border-b border-line/60 px-4">
+          <h3 className="text-ui font-semibold text-ink">
+            {draft.mode === "edit" ? "编辑文档" : "添加文档"}
+          </h3>
+          <button type="button" className={TEXT_BUTTON} onClick={onClose}>
+            关闭
+          </button>
         </header>
-        {children}
-      </section>
-    </div>,
-    document.body,
+
+        <div className="grid gap-3.5 p-4">
+          <label className={FIELD_LABEL}>
+            标题
+            <input
+              name="title"
+              defaultValue={link?.title ?? ""}
+              placeholder="文档标题"
+              autoComplete="off"
+              autoFocus
+              required
+              className={FIELD_INPUT}
+            />
+          </label>
+          <label className={FIELD_LABEL}>
+            URL
+            {/* 用 text 而不是 url：浏览器的 url 校验会挡掉没写协议的输入，
+                而这里恰恰要收下 "example.com" 再自己补 https。 */}
+            <input
+              name="url"
+              type="text"
+              inputMode="url"
+              defaultValue={link?.url ?? ""}
+              placeholder="https:// 或直接写域名"
+              autoComplete="off"
+              required
+              className={FIELD_INPUT}
+            />
+          </label>
+          {error && <p className="text-ui-sm text-danger">{error}</p>}
+        </div>
+
+        <footer className="flex justify-end gap-2 px-4 pb-4">
+          <button type="button" className={TEXT_BUTTON} onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="submit"
+            className="inline-flex h-7.5 items-center justify-center rounded-lg border border-accent bg-accent px-3.5 text-ui-sm font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
+          >
+            保存
+          </button>
+        </footer>
+      </form>
+    </div>
   );
 }
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
+/* ---------------------------------------------------------------------------
+   配置页：分类名（就地改名）
+   --------------------------------------------------------------------------- */
+function CategoryNameInput({
+  category,
+  focus,
+  onRename,
+}: {
+  category: AtlasCategory;
+  focus: boolean;
+  onRename: (name: string) => void;
+}) {
+  const [value, setValue] = useState(category.name);
+
+  useEffect(() => {
+    setValue(category.name);
+  }, [category.name]);
+
+  const commit = () => {
+    const next = value.trim();
+    if (!next || next === category.name) {
+      setValue(category.name);
+      return;
+    }
+    onRename(next);
+  };
+
+  return (
+    <input
+      value={value}
+      autoFocus={focus}
+      onFocus={(event) => {
+        if (focus) event.currentTarget.select();
+      }}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setValue(category.name);
+          event.currentTarget.blur();
+        }
+      }}
+      aria-label={`分类名称：${category.name}`}
+      className="h-8.5 w-full min-w-0 rounded-lg border border-transparent bg-transparent px-2.5 text-ui font-semibold tracking-[0.03em] text-ink-muted outline-none transition-colors duration-150 hover:border-line/60 hover:bg-surface/50 hover:text-ink focus:border-line/60 focus:bg-surface/50 focus:text-ink"
+    />
+  );
 }
 
-function StarIcon({ className, filled }: { className?: string; filled?: boolean }) {
+/* ---------------------------------------------------------------------------
+   Atlas
+   --------------------------------------------------------------------------- */
+export function AtlasApp() {
+  const [data, setData] = useState<AtlasData>(readAtlasData);
+  const [view, setView] = useState<"home" | "settings">("home");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<{ state: DocDraft; categoryId: string } | null>(null);
+  const [focusCategoryId, setFocusCategoryId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef(0);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  // 拖动期间要读最新的一棵树（弹窗、取消、提示文案都要），但不希望它进依赖数组。
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const [dropCategoryId, setDropCategoryId] = useState<string | null>(null);
+  const [tailCategoryId, setTailCategoryId] = useState<string | null>(null);
+  const homeScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    saveAtlasData(data);
+  }, [data]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+
+  // 配置页里按 Esc 返回 Atlas；弹窗打开时先让弹窗自己吃掉 Esc。
+  useEffect(() => {
+    if (view !== "settings" || draft) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setView("home");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [view, draft]);
+
+  const exportData = async () => {
+    try {
+      const path = await exportJsonFile("nib-atlas.json", JSON.stringify(data, null, 2));
+      showToast(path ? "已导出到桌面" : "已导出 nib-atlas.json");
+    } catch {
+      showToast("导出失败");
+    }
+  };
+
+  const importData = async (file: File) => {
+    try {
+      const next = normalizeAtlasData(JSON.parse(await file.text()));
+      if (!next) throw new Error("invalid atlas data");
+      setData(next);
+      showToast("已导入 Atlas 数据");
+    } catch {
+      showToast("导入失败：请选择由 Atlas 导出的 JSON");
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  /* ---------------------------------------------------------------- 拖动 */
+
+  const endDrag = useCallback(
+    ({ restore = false, silent = false }: { restore?: boolean; silent?: boolean } = {}) => {
+      const current = dragRef.current;
+      if (!current) return;
+      dragRef.current = null;
+      setDrag(null);
+      setDropCategoryId(null);
+      setTailCategoryId(null);
+
+      if (restore) {
+        setData(current.snapshot);
+        if (!silent) showToast("已取消移动");
+        return;
+      }
+      const category = current.target
+        ? findCategory(dataRef.current, current.target.categoryId)
+        : undefined;
+      if (category) showToast(`已移动到「${category.name}」`);
+    },
+    [showToast],
+  );
+
+  /** 把指针位置换算成落点：直接改数据，后面的项立刻顺延。 */
+  const probeDropPoint = useCallback((x: number, y: number) => {
+    const current = dragRef.current;
+    if (!current) return;
+    const probe = dropProbeAt(x, y, current.linkId);
+
+    if (probe.kind === "self") return;
+    if (probe.kind === "outside") {
+      dragRef.current = { ...current, target: null };
+      setDropCategoryId(null);
+      setTailCategoryId(null);
+      return;
+    }
+
+    const { target } = probe;
+    dragRef.current = { ...current, target };
+    setData((tree) => moveLink(tree, current.linkId, target.categoryId, target.index));
+    setDropCategoryId((prev) => (prev === target.categoryId ? prev : target.categoryId));
+    const tailId = target.tail ? target.categoryId : null;
+    setTailCategoryId((prev) => (prev === tailId ? prev : tailId));
+  }, []);
+
+  /** 拖到上下边缘时自己滚，不然长列表够不着。 */
+  const autoScroll = useCallback((clientY: number) => {
+    const scroller = homeScrollRef.current;
+    if (!scroller) return;
+    const rect = scroller.getBoundingClientRect();
+    if (clientY < rect.top + 54) scroller.scrollBy({ top: -12 });
+    else if (clientY > rect.bottom - 64) scroller.scrollBy({ top: 12 });
+  }, []);
+
+  useEffect(() => {
+    const move = (event: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || event.pointerId !== current.pointerId) return;
+      event.preventDefault();
+      const next: DragState = { ...current, x: event.clientX, y: event.clientY, moved: true };
+      dragRef.current = next;
+      setDrag(next);
+      probeDropPoint(event.clientX, event.clientY);
+      autoScroll(event.clientY);
+    };
+
+    const finish = (event: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || event.pointerId !== current.pointerId) return;
+      if (!current.moved) {
+        endDrag();
+        return;
+      }
+      if (dropProbeAt(event.clientX, event.clientY, current.linkId).kind === "outside") {
+        endDrag({ restore: true });
+        return;
+      }
+      endDrag();
+    };
+
+    const cancel = (event: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || event.pointerId !== current.pointerId) return;
+      endDrag({ restore: true, silent: true });
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && dragRef.current) {
+        event.preventDefault();
+        endDrag({ restore: true });
+      }
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [autoScroll, endDrag, probeDropPoint]);
+
+  const startDrag = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    link: AtlasLink,
+    categoryId: string,
+  ) => {
+    if (!editing || event.button !== 0 || dragRef.current) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const next: DragState = {
+      linkId: link.id,
+      title: link.title,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      width: rect.width,
+      moved: false,
+      target: null,
+      snapshot: data,
+    };
+    dragRef.current = next;
+    setDrag(next);
+    setDropCategoryId(categoryId);
+    // 跨分类时源节点会被重建，capture 会丢；window 上的监听是兜底。
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  /* ------------------------------------------------------- 分类 / 文档的增删改 */
+
+  const addCategory = () => {
+    const category: AtlasCategory = { id: createId("category"), name: "新分类", links: [] };
+    setData((current) => ({ ...current, categories: [...current.categories, category] }));
+    setFocusCategoryId(category.id);
+    showToast("已新建分类");
+  };
+
+  const renameCategory = (categoryId: string, name: string) => {
+    setData((current) => ({
+      ...current,
+      categories: current.categories.map((category) =>
+        category.id === categoryId ? { ...category, name } : category
+      ),
+    }));
+    showToast("分类已更新");
+  };
+
+  const deleteCategory = (category: AtlasCategory) => {
+    setData((current) => ({
+      ...current,
+      categories: current.categories.filter((item) => item.id !== category.id),
+    }));
+    showToast(
+      category.links.length > 0
+        ? `已删除「${category.name}」及其 ${category.links.length} 个文档`
+        : `已删除分类「${category.name}」`,
+    );
+  };
+
+  const deleteLink = (link: AtlasLink) => {
+    setData((current) => ({
+      ...current,
+      categories: current.categories.map((category) => ({
+        ...category,
+        links: category.links.filter((item) => item.id !== link.id),
+      })),
+    }));
+    showToast(`已删除「${link.title}」`);
+  };
+
+  const saveDraft = (
+    values: { title: string; url: string; categoryId: string },
+  ): string | null => {
+    if (!draft) return null;
+    const title = values.title.trim();
+    if (!title) return "标题不能为空";
+    const url = normalizeExternalUrl(values.url);
+    if (!url) return "URL 不合法，请填 http(s) 链接";
+    const target = findCategory(dataRef.current, values.categoryId);
+    if (!target) return "目标分类不存在";
+
+    if (draft.state.mode === "add") {
+      const link: AtlasLink = { id: createId("link"), title, url };
+      setData((current) => ({
+        ...current,
+        categories: current.categories.map((category) =>
+          category.id === values.categoryId
+            ? { ...category, links: [...category.links, link] }
+            : category
+        ),
+      }));
+      showToast(`已添加「${title}」`);
+    } else {
+      const linkId = draft.state.link.id;
+      setData((current) => {
+        const patched: AtlasData = {
+          ...current,
+          categories: current.categories.map((category) => ({
+            ...category,
+            links: category.links.map((link) =>
+              link.id === linkId ? { ...link, title, url } : link
+            ),
+          })),
+        };
+        const from = current.categories.find((category) =>
+          category.links.some((link) => link.id === linkId)
+        );
+        if (!from || from.id === values.categoryId) return patched;
+        return moveLink(patched, linkId, values.categoryId, Number.MAX_SAFE_INTEGER);
+      });
+      showToast(`已更新「${title}」`);
+    }
+
+    setDraft(null);
+    return null;
+  };
+
+  /* ---------------------------------------------------------------- 渲染 */
+
+  const toggleEditing = () => {
+    if (editing) {
+      endDrag({ restore: true, silent: true });
+      setEditing(false);
+      showToast("排列已保存");
+      return;
+    }
+    setEditing(true);
+  };
+
+  const openSettings = () => {
+    endDrag({ restore: true, silent: true });
+    setEditing(false);
+    setView("settings");
+  };
+
+  const setCardWidth = (cardWidth: number) => {
+    setData((current) => ({
+      ...current,
+      settings: { ...current.settings, cardWidth },
+    }));
+  };
+
+  const isEmpty = data.categories.length === 0;
+
   return (
-    <svg
-      viewBox="0 0 16 16"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M8 2.1l1.77 3.58 3.95.58-2.86 2.79.68 3.94L8 11.13l-3.54 1.86.68-3.94L2.28 6.26l3.95-.58L8 2.1z" />
-    </svg>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-canvas">
+      {view === "home" ? (
+        <>
+          <div className="flex h-10 shrink-0 items-center justify-end gap-2 px-4">
+            <button
+              type="button"
+              aria-label={editing ? "完成排列" : "编辑位置"}
+              title={editing ? "完成排列" : "编辑位置"}
+              aria-pressed={editing}
+              onClick={toggleEditing}
+              className={`${HEADER_ICON_BUTTON} ${editing ? HEADER_BUTTON_ACTIVE : ""}`}
+            >
+              <PencilIcon className="size-3.5" />
+            </button>
+            <button type="button" onClick={openSettings} className={HEADER_BUTTON}>
+              <SlidersIcon className="size-3.5 translate-y-px" />
+              Atlas 配置
+            </button>
+          </div>
+
+          <div ref={homeScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
+            <div className="w-full">
+              {isEmpty && (
+                <p className="pt-24 text-center text-ui-sm text-ink-subtle">
+                  还没有内容 · 去「Atlas 配置」新建分类和文档
+                </p>
+              )}
+
+              {data.categories.map((category) => (
+                <section
+                  key={category.id}
+                  data-atlas-category={category.id}
+                  className="mt-10 first:mt-0"
+                >
+                  <div className="mb-4 flex items-center gap-2 px-0.5">
+                    <span className="h-px w-4 shrink-0 rounded-full bg-line/80" />
+                    <span className="shrink-0 text-ui-sm font-semibold tracking-[0.055em] whitespace-nowrap text-ink-muted">
+                      {category.name}
+                    </span>
+                    <span className="h-px min-w-0 flex-1 rounded-full bg-linear-to-r from-line/80 to-transparent" />
+                  </div>
+
+                  <div
+                    className={`flex flex-wrap gap-x-2.5 gap-y-3.5 rounded-[0.625rem] transition-colors duration-150 ${
+                      dropCategoryId === category.id ? "bg-accent/5" : ""
+                    }`}
+                  >
+                    {category.links.map((link) => {
+                      const isDragged = drag?.linkId === link.id;
+                      return (
+                        <button
+                          key={link.id}
+                          type="button"
+                          style={{ width: `min(${data.settings.cardWidth}px, 100%)` }}
+                          data-atlas-link={link.id}
+                          aria-label={editing ? link.title : `打开 ${link.title}`}
+                          aria-grabbed={isDragged || undefined}
+                          onPointerDown={
+                            editing
+                              ? (event) => startDrag(event, link, category.id)
+                              : undefined
+                          }
+                          onClick={
+                            editing ? undefined : () => void openExternalUrl(link.url)
+                          }
+                          className={[
+                            "relative flex h-13 min-w-0 items-center rounded-[0.5625rem] border px-3.5 text-left transition-[background-color,border-color,box-shadow,transform,opacity] duration-75",
+                            isDragged
+                              ? "border-dashed border-accent/50 bg-accent/[0.07] shadow-[inset_3px_0_0_var(--c-accent),-7px_0_18px_var(--c-accent-soft)]"
+                              : editing
+                                ? "cursor-grab touch-none select-none border-line/40 bg-surface/30 hover:border-line-strong hover:bg-control-hover active:cursor-grabbing"
+                                : "border-transparent hover:border-line-strong hover:bg-control-hover active:translate-y-px",
+                          ].join(" ")}
+                        >
+                          <span
+                            className={`block min-w-0 flex-1 truncate text-ui font-medium text-ink transition-opacity duration-150 ${
+                              isDragged ? "opacity-20" : ""
+                            }`}
+                          >
+                            {link.title}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 编辑模式下的末尾投放区：平时只是一段留白，拖到上面才亮 */}
+                  {editing && (
+                    <div
+                      data-atlas-tail={category.id}
+                      className={`mt-2 rounded-[0.5625rem] transition-all duration-150 ${
+                        tailCategoryId === category.id
+                          ? "min-h-12 border border-accent/50 bg-accent-soft shadow-[inset_3px_0_0_var(--c-accent),-7px_0_18px_var(--c-accent-soft)]"
+                          : "min-h-6"
+                      }`}
+                    />
+                  )}
+                </section>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[66rem] px-4 pt-2 pb-4">
+            <header className="mb-8 flex items-start justify-between gap-5">
+              <div>
+                <h2 className="text-ui-xl font-semibold text-ink">Atlas 配置</h2>
+                <p className="mt-1 text-ui-sm text-ink-subtle">
+                  这里只维护分类和文档；排序与跨分类移动请在主页面完成。
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" className={HEADER_BUTTON} onClick={() => void exportData()}>
+                  导出
+                </button>
+                <button
+                  type="button"
+                  className={HEADER_BUTTON}
+                  onClick={() => importRef.current?.click()}
+                >
+                  导入
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void importData(file);
+                  }}
+                />
+                <button type="button" onClick={() => setView("home")} className={HEADER_BUTTON}>
+                  返回 Atlas
+                </button>
+              </div>
+            </header>
+
+            <div className="mb-8.5 flex items-center justify-between rounded-xl border border-line/60 bg-surface/60 px-3.5 py-3">
+              <span className="text-ui-sm font-semibold text-ink">卡片宽度</span>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="range"
+                  min={MIN_CARD_WIDTH / 16}
+                  max={MAX_CARD_WIDTH / 16}
+                  step={0.25}
+                  value={data.settings.cardWidth / 16}
+                  onChange={(event) => setCardWidth(Number(event.target.value) * 16)}
+                  className="w-40 accent-accent"
+                  aria-label="卡片宽度"
+                />
+                <span className="w-16 text-right font-mono text-ui-xs text-ink-muted">
+                  {(data.settings.cardWidth / 16).toFixed(2).replace(/\.?0+$/, "")}rem
+                </span>
+              </div>
+            </div>
+
+            {data.categories.map((category) => (
+              <section key={category.id} className="mt-8.5 first:mt-0">
+                <div className="mb-2.5 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+                  <CategoryNameInput
+                    category={category}
+                    focus={focusCategoryId === category.id}
+                    onRename={(name) => renameCategory(category.id, name)}
+                  />
+                  <span className="text-ui-xs whitespace-nowrap text-ink-subtle">
+                    {category.links.length} 个文档
+                  </span>
+                  <button
+                    type="button"
+                    className={DANGER_BUTTON}
+                    onClick={() => deleteCategory(category)}
+                  >
+                    删除
+                  </button>
+                </div>
+
+                <div className="grid gap-2">
+                  {category.links.map((link) => (
+                    <div
+                      key={link.id}
+                      className="grid min-h-15 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[0.5625rem] border border-line/60 bg-surface/60 py-1.5 pr-1.5 pl-3 transition-colors duration-150 hover:border-line hover:bg-surface"
+                    >
+                      <div className="grid min-w-0 gap-0.5 py-0.5">
+                        <span className="truncate text-ui font-medium text-ink">
+                          {link.title}
+                        </span>
+                        <span className="truncate font-mono text-ui-xs text-ink-subtle">
+                          {link.url}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={TEXT_BUTTON}
+                        onClick={() =>
+                          setDraft({
+                            state: { mode: "edit", link },
+                            categoryId: category.id,
+                          })
+                        }
+                      >
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        className={DANGER_BUTTON}
+                        onClick={() => deleteLink(link)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  className={`${OUTLINE_BUTTON} mt-2.5`}
+                  onClick={() =>
+                    setDraft({ state: { mode: "add" }, categoryId: category.id })
+                  }
+                >
+                  添加文档
+                </button>
+              </section>
+            ))}
+
+            {isEmpty && (
+              <p className="text-ui-sm text-ink-subtle">
+                还没有分类，先建一个——分类里再添加文档。
+              </p>
+            )}
+
+            <button type="button" className={`${OUTLINE_BUTTON} mt-9.5 h-11`} onClick={addCategory}>
+              新建分类
+            </button>
+          </div>
+        </div>
+      )}
+
+      {drag && (
+        <div
+          style={{
+            ...ghostOffset(drag),
+            width: drag.width,
+          }}
+          className="pointer-events-none fixed z-50 flex h-13 items-center justify-between gap-3 rounded-[0.625rem] border border-accent bg-raised px-3.5 opacity-[0.97] shadow-[0_20px_50px_rgba(0,0,0,0.46)]"
+        >
+          <span className="min-w-0 flex-1 truncate text-ui font-medium text-ink">
+            {drag.title}
+          </span>
+          <span className="shrink-0 text-ui-xs font-bold tracking-[0.06em] text-accent">
+            移动中
+          </span>
+        </div>
+      )}
+
+      {drag && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-40 inline-flex h-8.5 -translate-x-1/2 items-center rounded-full border border-accent/30 bg-sunken/95 px-3.5 text-ui-xs font-semibold whitespace-nowrap text-ink-muted shadow-[0_14px_34px_rgba(0,0,0,0.35)]">
+          正在移动「{drag.title}」 · 松开放置
+        </div>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-[60] inline-flex h-8.5 -translate-x-1/2 items-center rounded-full border border-line bg-sunken/95 px-3.5 text-ui-xs font-semibold whitespace-nowrap text-ink shadow-[0_14px_34px_rgba(0,0,0,0.35)]"
+        >
+          {toast}
+        </div>
+      )}
+
+      {draft && (
+        <DocDialog
+          draft={draft.state}
+          categoryId={draft.categoryId}
+          onClose={() => setDraft(null)}
+          onSubmit={saveDraft}
+        />
+      )}
+    </div>
   );
 }
