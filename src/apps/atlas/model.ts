@@ -1,3 +1,5 @@
+import { readAgentData, writeAgentData } from "../../shell/agentStore";
+
 /**
  * Atlas 的本地数据模型。
  *
@@ -200,9 +202,21 @@ export function readAtlasData(): AtlasData {
   return data;
 }
 
+export async function readAtlasDataFromAgent(): Promise<AtlasData | null> {
+  const contents = await readAgentData("atlas");
+  if (!contents) return null;
+  try {
+    return normalizeAtlasData(JSON.parse(contents));
+  } catch {
+    return null;
+  }
+}
+
 export function saveAtlasData(data: AtlasData): void {
-  localStorage.setItem(ATLAS_STORAGE_KEY, JSON.stringify(data));
+  const contents = JSON.stringify(data);
+  localStorage.setItem(ATLAS_STORAGE_KEY, contents);
   localStorage.setItem(ATLAS_INITIALIZED_KEY, "1");
+  void writeAgentData("atlas", contents);
 }
 
 export function findCategory(data: AtlasData, categoryId: string): AtlasCategory | undefined {

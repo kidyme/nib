@@ -20,6 +20,7 @@ import {
   findListByRole,
   moveCard,
   readLoopData,
+  readLoopDataFromAgent,
   saveLoopData,
   type LoopCard,
   type LoopData,
@@ -44,6 +45,7 @@ type CardDrag = {
 
 export function LoopApp() {
   const [data, setData] = useState<LoopData>(readLoopData);
+  const [agentLoaded, setAgentLoaded] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [statusCardId, setStatusCardId] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<LoopSettingsTab | null>(null);
@@ -59,8 +61,19 @@ export function LoopApp() {
   const boardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    saveLoopData(data);
-  }, [data]);
+    const sync = async () => {
+      const next = await readLoopDataFromAgent();
+      if (next) setData(next);
+      setAgentLoaded(true);
+    };
+    void sync();
+    window.addEventListener("focus", sync);
+    return () => window.removeEventListener("focus", sync);
+  }, []);
+
+  useEffect(() => {
+    if (agentLoaded) saveLoopData(data);
+  }, [agentLoaded, data]);
 
   const editingCard = data.cards.find((card) => card.id === editingCardId);
   const statusCard = data.cards.find((card) => card.id === statusCardId);
@@ -76,7 +89,9 @@ export function LoopApp() {
         ? {
             ...current,
             cards: current.cards.map((card) =>
-              card.id === cardId ? { ...card, ...fields } : card
+              card.id === cardId
+                ? { ...card, ...fields, updatedAt: new Date().toISOString() }
+                : card
             ),
           }
         : current;
@@ -160,6 +175,9 @@ export function LoopApp() {
         links: [],
         order: cardsInList(current.cards, listId).length,
         createdAt: new Date().toISOString(),
+        updatedAt: null,
+        startedAt: null,
+        completedAt: null,
         statusChangedAt: null,
         archivedAt: null,
         deletedAt: null,

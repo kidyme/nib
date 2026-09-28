@@ -15,6 +15,7 @@ import {
   moveLink,
   normalizeAtlasData,
   readAtlasData,
+  readAtlasDataFromAgent,
   saveAtlasData,
   type AtlasCategory,
   type AtlasData,
@@ -299,6 +300,7 @@ function CategoryNameInput({
    --------------------------------------------------------------------------- */
 export function AtlasApp() {
   const [data, setData] = useState<AtlasData>(readAtlasData);
+  const [agentLoaded, setAgentLoaded] = useState(false);
   const [view, setView] = useState<"home" | "settings">("home");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<{ state: DocDraft; categoryId: string } | null>(null);
@@ -320,8 +322,19 @@ export function AtlasApp() {
   const homeScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    saveAtlasData(data);
-  }, [data]);
+    const sync = async () => {
+      const next = await readAtlasDataFromAgent();
+      if (next) setData(next);
+      setAgentLoaded(true);
+    };
+    void sync();
+    window.addEventListener("focus", sync);
+    return () => window.removeEventListener("focus", sync);
+  }, []);
+
+  useEffect(() => {
+    if (agentLoaded) saveAtlasData(data);
+  }, [agentLoaded, data]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);

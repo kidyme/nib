@@ -13,6 +13,9 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod agent_server;
+pub mod agent_store;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FontFace {
@@ -46,8 +49,35 @@ fn descriptor_string(descriptor: &CTFontDescriptor, attribute: &CFString) -> Opt
         .map(|value| value.to_string())
 }
 
-/// 本机所有可用 font face。PostScript 名是最终选择依据，family/style 只用于
-/// 设置页展示和搜索。
+#[tauri::command]
+fn read_agent_data(app: tauri::AppHandle, dataset: String) -> Result<Option<String>, String> {
+    use tauri::Manager;
+
+    let dataset = agent_store::Dataset::parse(&dataset)?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    agent_server::read_payload(&dir, dataset)
+}
+
+#[tauri::command]
+fn write_agent_data(
+    app: tauri::AppHandle,
+    dataset: String,
+    contents: String,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let dataset = agent_store::Dataset::parse(&dataset)?;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    agent_server::write_payload(&dir, dataset, &contents, "user", "ui_save", None).map(|_| ())
+}
+
+/// 本机所有可用 font face。PostScript 名是最终选择依据，family/style 只用于设置页展示和搜索。
 #[tauri::command]
 fn list_fonts() -> Vec<FontFace> {
     // SAFETY: CoreText owns the returned collection and descriptors.
@@ -104,8 +134,24 @@ fn list_fonts() -> Vec<FontFace> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            use tauri::Manager;
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?;
+            let server = agent_server::start(&data_dir)
+                .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            app.manage(server);
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![list_fonts, export_json_to_desktop])
+        .invoke_handler(tauri::generate_handler![
+            list_fonts,
+            export_json_to_desktop,
+            read_agent_data,
+            write_agent_data
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

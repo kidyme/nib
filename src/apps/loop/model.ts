@@ -1,3 +1,5 @@
+import { readAgentData, writeAgentData } from "../../shell/agentStore";
+
 /**
  * Loop 的本地数据模型。
  *
@@ -14,7 +16,7 @@ export type LoopList = {
   id: string;
   name: string;
   /** 系统动作使用的语义，和显示名称解耦；普通列没有这个字段。 */
-  role?: "archive" | "trash";
+  role?: "done" | "archive" | "trash";
 };
 
 export type LoopLink = {
@@ -33,6 +35,12 @@ export type LoopCard = {
   links: LoopLink[];
   order: number;
   createdAt: string;
+  /** 最近一次内容或业务修改时间；旧数据没有时保持 null。 */
+  updatedAt: string | null;
+  /** 第一次离开 Todo 且未进入归档/回收站的时间。 */
+  startedAt: string | null;
+  /** 第一次进入 Done 的时间；完成卡片不再重新打开。 */
+  completedAt: string | null;
   /** 最近一次状态流转时间；没流转过就是 null。 */
   statusChangedAt: string | null;
   archivedAt: string | null;
@@ -88,7 +96,7 @@ export function createInitialLoopData(): LoopData {
       { id: "list_todo", name: "Todo" },
       { id: "list_active", name: "Active" },
       { id: "list_focus", name: "Focus" },
-      { id: "list_done", name: "Done" },
+      { id: "list_done", name: "Done", role: "done" },
       { id: "list_archive", name: "Archive", role: "archive" },
       { id: "list_trash", name: "Trash", role: "trash" },
     ],
@@ -116,6 +124,9 @@ export function createInitialLoopData(): LoopData {
         links: [],
         order: 0,
         createdAt: "2026-09-18T01:20:00.000Z",
+        updatedAt: null,
+        startedAt: null,
+        completedAt: null,
         statusChangedAt: null,
         archivedAt: null,
         deletedAt: null,
@@ -136,6 +147,9 @@ export function createInitialLoopData(): LoopData {
         ],
         order: 1,
         createdAt: "2026-09-18T01:24:00.000Z",
+        updatedAt: null,
+        startedAt: null,
+        completedAt: null,
         statusChangedAt: null,
         archivedAt: null,
         deletedAt: null,
@@ -156,6 +170,9 @@ export function createInitialLoopData(): LoopData {
         ],
         order: 0,
         createdAt: "2026-09-16T02:10:00.000Z",
+        updatedAt: null,
+        startedAt: "2026-09-19T03:40:00.000Z",
+        completedAt: null,
         statusChangedAt: "2026-09-19T03:40:00.000Z",
         archivedAt: null,
         deletedAt: null,
@@ -170,6 +187,9 @@ export function createInitialLoopData(): LoopData {
         links: [],
         order: 1,
         createdAt: "2026-09-17T06:05:00.000Z",
+        updatedAt: null,
+        startedAt: "2026-09-19T02:15:00.000Z",
+        completedAt: null,
         statusChangedAt: "2026-09-19T02:15:00.000Z",
         archivedAt: null,
         deletedAt: null,
@@ -184,6 +204,9 @@ export function createInitialLoopData(): LoopData {
         links: [],
         order: 0,
         createdAt: "2026-09-15T07:30:00.000Z",
+        updatedAt: null,
+        startedAt: "2026-09-19T05:00:00.000Z",
+        completedAt: null,
         statusChangedAt: "2026-09-19T05:00:00.000Z",
         archivedAt: null,
         deletedAt: null,
@@ -198,6 +221,9 @@ export function createInitialLoopData(): LoopData {
         links: [],
         order: 0,
         createdAt: "2026-09-12T03:00:00.000Z",
+        updatedAt: null,
+        startedAt: "2026-09-19T08:45:00.000Z",
+        completedAt: "2026-09-19T08:45:00.000Z",
         statusChangedAt: "2026-09-19T08:45:00.000Z",
         archivedAt: null,
         deletedAt: null,
@@ -253,7 +279,7 @@ function readLists(value: unknown): LoopList[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!isRecord(item) || typeof item.id !== "string") return [];
-    const role = item.role === "archive" || item.role === "trash" ? item.role : undefined;
+    const role = item.role === "done" || item.role === "archive" || item.role === "trash" ? item.role : undefined;
     return [{ id: item.id, name: readText(item.name, "未命名列表"), role }];
   });
 }
@@ -268,7 +294,9 @@ function assignLegacyListRoles(lists: LoopList[]): LoopList[] {
       ? "trash"
       : ["archive", "归档"].includes(name)
         ? "archive"
-        : null;
+        : ["done", "完成"].includes(name)
+          ? "done"
+          : null;
     if (!role || roles.has(role)) return list;
     roles.add(role);
     return { ...list, role };
@@ -305,6 +333,9 @@ function readCards(value: unknown, fallbackListId: string): LoopCard[] {
       links: readLinks(item.links),
       order: typeof item.order === "number" && Number.isFinite(item.order) ? item.order : 0,
       createdAt: readTime(item.createdAt) ?? new Date().toISOString(),
+      updatedAt: readTime(item.updatedAt),
+      startedAt: readTime(item.startedAt),
+      completedAt: readTime(item.completedAt),
       statusChangedAt: readTime(item.statusChangedAt),
       archivedAt: readTime(item.archivedAt),
       deletedAt: readTime(item.deletedAt),
@@ -364,8 +395,20 @@ export function readLoopData(): LoopData {
   }
 }
 
+export async function readLoopDataFromAgent(): Promise<LoopData | null> {
+  const contents = await readAgentData("loop");
+  if (!contents) return null;
+  try {
+    return normalizeLoopData(JSON.parse(contents));
+  } catch {
+    return null;
+  }
+}
+
 export function saveLoopData(data: LoopData): void {
-  localStorage.setItem(LOOP_STORAGE_KEY, JSON.stringify(data));
+  const contents = JSON.stringify(data);
+  localStorage.setItem(LOOP_STORAGE_KEY, contents);
+  void writeAgentData("loop", contents);
 }
 
 export function cardsInList(cards: LoopCard[], listId: string): LoopCard[] {
@@ -399,13 +442,23 @@ export function moveCard(
   const positions = new Map(nextCards.map((item, position) => [item.id, position]));
   const changedList = card.listId !== toListId;
   const toList = data.lists.find((item) => item.id === toListId);
+  // Done 是终态；完成后继续工作请新建卡片，避免周报重复计算完成记录。
+  if (changedList && card.completedAt && toList?.role !== "archive" && toList?.role !== "trash" && toList?.role !== "done") {
+    return data;
+  }
+  const now = new Date().toISOString();
+  const entersDone = changedList && toList?.role === "done";
+  const entersActive = changedList && !["archive", "trash", "done"].includes(toList?.role ?? "") && card.startedAt === null;
   const moved = changedList
     ? {
         ...card,
         listId: toListId,
         order: positions.get(cardId) ?? 0,
-        archivedAt: toList?.role === "archive" ? new Date().toISOString() : null,
-        deletedAt: toList?.role === "trash" ? new Date().toISOString() : null,
+        updatedAt: now,
+        startedAt: entersActive ? now : card.startedAt,
+        completedAt: entersDone ? now : card.completedAt,
+        archivedAt: toList?.role === "archive" ? now : null,
+        deletedAt: toList?.role === "trash" ? now : null,
       }
     : { ...card, order: positions.get(cardId) ?? 0 };
   return {
