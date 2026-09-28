@@ -14,6 +14,7 @@ import {
   createInitialLoopData,
   findListByRole,
   normalizeLoopData,
+  saveLoopData,
   type LoopData,
   type LoopOption,
 } from "./model";
@@ -477,6 +478,7 @@ function DataSettings({
     try {
       const next = normalizeLoopData(JSON.parse(await file.text()));
       if (!next) throw new Error("invalid loop data");
+      await saveLoopData(next, "import");
       onChange(next);
       setStatus({ text: "已导入 Loop 数据" });
     } catch {

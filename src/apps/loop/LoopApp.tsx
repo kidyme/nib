@@ -46,6 +46,7 @@ type CardDrag = {
 export function LoopApp() {
   const [data, setData] = useState<LoopData>(readLoopData);
   const [agentLoaded, setAgentLoaded] = useState(false);
+  const syncGenerationRef = useRef(0);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [statusCardId, setStatusCardId] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<LoopSettingsTab | null>(null);
@@ -62,8 +63,9 @@ export function LoopApp() {
 
   useEffect(() => {
     const sync = async () => {
+      const generation = syncGenerationRef.current;
       const next = await readLoopDataFromAgent();
-      if (next) setData(next);
+      if (generation === syncGenerationRef.current && next) setData(next);
       setAgentLoaded(true);
     };
     void sync();
@@ -72,7 +74,7 @@ export function LoopApp() {
   }, []);
 
   useEffect(() => {
-    if (agentLoaded) saveLoopData(data);
+    if (agentLoaded) void saveLoopData(data).catch((error) => console.error("failed to persist data", error));
   }, [agentLoaded, data]);
 
   const editingCard = data.cards.find((card) => card.id === editingCardId);
@@ -495,7 +497,10 @@ export function LoopApp() {
         <LoopSettingsDialog
           data={data}
           initialTab={settingsTab}
-          onChange={setData}
+          onChange={(next) => {
+            syncGenerationRef.current += 1;
+            setData(next);
+          }}
           onClose={() => setSettingsTab(null)}
         />
       )}

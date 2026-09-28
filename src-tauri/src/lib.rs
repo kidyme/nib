@@ -66,6 +66,7 @@ fn write_agent_data(
     app: tauri::AppHandle,
     dataset: String,
     contents: String,
+    action: Option<String>,
 ) -> Result<(), String> {
     use tauri::Manager;
 
@@ -74,7 +75,15 @@ fn write_agent_data(
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    agent_server::write_payload(&dir, dataset, &contents, "user", "ui_save", None).map(|_| ())
+    agent_server::write_payload(
+        &dir,
+        dataset,
+        &contents,
+        "user",
+        action.as_deref().unwrap_or("ui_save"),
+        None,
+    )
+    .map(|_| ())
 }
 
 /// 本机所有可用 font face。PostScript 名是最终选择依据，family/style 只用于设置页展示和搜索。

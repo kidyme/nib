@@ -1,4 +1,4 @@
-import { readAgentData, writeAgentData } from "../../shell/agentStore";
+import { readAgentData, writeAgentData, type AgentWriteAction } from "../../shell/agentStore";
 
 /**
  * Loop 的本地数据模型。
@@ -351,8 +351,7 @@ export function normalizeLoopData(value: unknown): LoopData | null {
   if (lists.length === 0) return null;
 
   const statuses = readOptions(value.statuses);
-  // 不再内置标签；旧数据里的标签都是历史遗留，清空。
-  const labels: LoopOption[] = [];
+  const labels = readOptions(value.labels);
   const statusesForData = statuses;
   const now = new Date().toISOString();
   const cards = readCards(value.cards, lists[0].id).map((card) => {
@@ -405,10 +404,10 @@ export async function readLoopDataFromAgent(): Promise<LoopData | null> {
   }
 }
 
-export function saveLoopData(data: LoopData): void {
+export async function saveLoopData(data: LoopData, action: AgentWriteAction = "ui_save"): Promise<void> {
   const contents = JSON.stringify(data);
+  await writeAgentData("loop", contents, action);
   localStorage.setItem(LOOP_STORAGE_KEY, contents);
-  void writeAgentData("loop", contents);
 }
 
 export function cardsInList(cards: LoopCard[], listId: string): LoopCard[] {

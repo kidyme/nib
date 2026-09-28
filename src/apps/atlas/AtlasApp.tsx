@@ -301,6 +301,7 @@ function CategoryNameInput({
 export function AtlasApp() {
   const [data, setData] = useState<AtlasData>(readAtlasData);
   const [agentLoaded, setAgentLoaded] = useState(false);
+  const syncGenerationRef = useRef(0);
   const [view, setView] = useState<"home" | "settings">("home");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<{ state: DocDraft; categoryId: string } | null>(null);
@@ -323,8 +324,9 @@ export function AtlasApp() {
 
   useEffect(() => {
     const sync = async () => {
+      const generation = syncGenerationRef.current;
       const next = await readAtlasDataFromAgent();
-      if (next) setData(next);
+      if (generation === syncGenerationRef.current && next) setData(next);
       setAgentLoaded(true);
     };
     void sync();
@@ -333,7 +335,7 @@ export function AtlasApp() {
   }, []);
 
   useEffect(() => {
-    if (agentLoaded) saveAtlasData(data);
+    if (agentLoaded) void saveAtlasData(data).catch((error) => console.error("failed to persist data", error));
   }, [agentLoaded, data]);
 
   const showToast = useCallback((message: string) => {
@@ -367,6 +369,8 @@ export function AtlasApp() {
     try {
       const next = normalizeAtlasData(JSON.parse(await file.text()));
       if (!next) throw new Error("invalid atlas data");
+      await saveAtlasData(next, "import");
+      syncGenerationRef.current += 1;
       setData(next);
       showToast("已导入 Atlas 数据");
     } catch {

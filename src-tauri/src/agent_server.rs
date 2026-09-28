@@ -549,7 +549,10 @@ fn write_dataset(
     request_id: Option<&str>,
 ) -> rusqlite::Result<String> {
     let before = export_dataset(connection, dataset)?.unwrap_or_else(|| "null".into());
-    if dataset == "loop" && before != "null" {
+    // An explicit JSON import is a restore operation. Older exports do not have
+    // lifecycle timestamps, so applying the normal UI transition guard here would
+    // reject valid backups of cards that are currently Done.
+    if dataset == "loop" && action != "import" && before != "null" {
         validate_loop_transition(&before, payload)?;
     }
     let transaction = connection.unchecked_transaction()?;
@@ -992,6 +995,21 @@ mod tests {
         assert_eq!(value["cards"][0]["title"], "legacy");
         assert_eq!(value["cards"][0]["completedAt"], Value::Null);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn import_accepts_legacy_loop_backup_of_completed_card() {
+        let path = std::env::temp_dir().join(format!("nib-import-{}", unique_suffix()));
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch(SCHEMA).unwrap();
+        let current = r#"{"lists":[{"id":"list_done","name":"Done","role":"done"}],"statuses":[],"labels":[],"cards":[{"id":"c1","listId":"list_done","title":"x","description":"","order":0,"createdAt":"2026-09-01T00:00:00Z","completedAt":"2026-09-02T00:00:00Z"}],"settings":{}}"#;
+        write_dataset(&c, "loop", current, "test", "replace", None).unwrap();
+        let legacy = r#"{"lists":[{"id":"list_done","name":"Done"}],"statuses":[],"cards":[{"id":"c1","listId":"list_done","title":"old backup","description":"","order":0,"createdAt":"2026-09-01T00:00:00Z"}],"settings":{}}"#;
+        write_dataset(&c, "loop", legacy, "test", "import", None).unwrap();
+        let output = export_dataset(&c, "loop").unwrap().unwrap();
+        let value: Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(value["cards"][0]["title"], "old backup");
+        let _ = fs::remove_file(path);
     }
 
     #[test]
