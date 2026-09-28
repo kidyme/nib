@@ -549,11 +549,8 @@ fn write_dataset(
     request_id: Option<&str>,
 ) -> rusqlite::Result<String> {
     let before = export_dataset(connection, dataset)?.unwrap_or_else(|| "null".into());
-    // An explicit JSON import is a restore operation. Older exports do not have
-    // lifecycle timestamps, so applying the normal UI transition guard here would
-    // reject valid backups of cards that are currently Done.
     if dataset == "loop" && action != "import" && before != "null" {
-        validate_loop_transition(&before, payload)?;
+        validate_loop_timestamps(&before, payload)?;
     }
     let transaction = connection.unchecked_transaction()?;
     replace_dataset(
@@ -855,7 +852,7 @@ fn skill_manifest() -> Value {
         "ok": true, "apiVersion": API_VERSION, "name": "nib",
         "description": "Nib local agent API. SQLite is authoritative; JSON export/import shape remains compatible.",
         "transport": "HTTP on 127.0.0.1 with Bearer token from agent-server.json",
-        "loopSemantics": {"completedAt":"time the card enters Done; completed cards are not reopened", "startedAt":"first time the card leaves Todo into a non-archive/non-trash list", "updatedAt":"content or business mutation time; reorder-only moves do not change it"},
+        "loopSemantics": {"completedAt":"time the card enters Done; moving it later does not clear the historical completion time", "startedAt":"first time the card leaves Todo into a non-archive/non-trash list", "updatedAt":"content or business mutation time; reorder-only moves do not change it"},
         "endpoints": [
             {"method":"GET","path":"/api/v1/health"}, {"method":"GET","path":"/api/v1/skill"},
             {"method":"GET","path":"/api/v1/loop"}, {"method":"PUT","path":"/api/v1/loop"}, {"method":"POST","path":"/api/v1/loop/import"}, {"method":"GET","path":"/api/v1/loop/export"}, {"method":"GET","path":"/api/v1/loop/audit-logs"},
@@ -1013,6 +1010,22 @@ mod tests {
     }
 
     #[test]
+    fn ui_save_allows_moving_completed_card() {
+        let path = std::env::temp_dir().join(format!("nib-reopen-{}", unique_suffix()));
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch(SCHEMA).unwrap();
+        let done = r#"{"lists":[{"id":"list_done","name":"Done","role":"done"},{"id":"list_active","name":"Active"}],"statuses":[],"labels":[],"cards":[{"id":"c1","listId":"list_done","title":"x","description":"","order":0,"createdAt":"2026-09-01T00:00:00Z","completedAt":"2026-09-02T00:00:00Z"}],"settings":{}}"#;
+        write_dataset(&c, "loop", done, "test", "import", None).unwrap();
+        let moved = r#"{"lists":[{"id":"list_done","name":"Done","role":"done"},{"id":"list_active","name":"Active"}],"statuses":[],"labels":[],"cards":[{"id":"c1","listId":"list_active","title":"x","description":"","order":0,"createdAt":"2026-09-01T00:00:00Z","completedAt":"2026-09-02T00:00:00Z"}],"settings":{}}"#;
+        write_dataset(&c, "loop", moved, "test", "ui_save", None).unwrap();
+        let output = export_dataset(&c, "loop").unwrap().unwrap();
+        let value: Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(value["cards"][0]["listId"], "list_active");
+        assert_eq!(value["cards"][0]["completedAt"], "2026-09-02T00:00:00Z");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn normalized_round_trip_keeps_new_times() {
         let path = std::env::temp_dir().join(format!("nib-test-{}", unique_suffix()));
         let c = Connection::open(&path).unwrap();
@@ -1026,7 +1039,7 @@ mod tests {
     }
 }
 
-fn validate_loop_transition(before_json: &str, after_json: &str) -> rusqlite::Result<()> {
+fn validate_loop_timestamps(before_json: &str, after_json: &str) -> rusqlite::Result<()> {
     let before: Value =
         serde_json::from_str(before_json).map_err(|_| rusqlite::Error::InvalidQuery)?;
     let after: Value =
@@ -1041,11 +1054,6 @@ fn validate_loop_transition(before_json: &str, after_json: &str) -> rusqlite::Re
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let lists = after
-        .get("lists")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
     for old in before_cards {
         let Some(id) = id_of(&old) else { continue };
         let Some(old_completed) = old.get("completedAt").and_then(Value::as_str) else {
@@ -1054,19 +1062,6 @@ fn validate_loop_transition(before_json: &str, after_json: &str) -> rusqlite::Re
         let Some(next) = after_cards.iter().find(|card| id_of(card) == Some(id)) else {
             continue;
         };
-        let list_id = next.get("listId").and_then(Value::as_str).unwrap_or("");
-        let role = lists
-            .iter()
-            .find(|list| id_of(list) == Some(list_id))
-            .and_then(list_role_json);
-        if !matches!(role, Some("done") | Some("archive") | Some("trash")) {
-            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("completed card {id} cannot be reopened"),
-                ),
-            )));
-        }
         if next.get("completedAt").and_then(Value::as_str) != Some(old_completed) {
             return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
                 std::io::Error::new(
@@ -1279,11 +1274,6 @@ fn move_loop_card_json(value: &mut Value, id: &str, input: &Value) -> Result<(),
         .iter()
         .position(|card| id_of(card) == Some(id))
         .ok_or_else(|| format!("card not found: {id}"))?;
-    let current = cards[position].clone();
-    let completed = current.get("completedAt").and_then(Value::as_str).is_some();
-    if completed && !["done", "archive", "trash"].contains(&target_role.as_str()) {
-        return Err("completed cards cannot be reopened; create a new card".into());
-    }
     let mut moved = cards.remove(position);
     let old_list = moved
         .get("listId")

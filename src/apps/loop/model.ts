@@ -441,10 +441,6 @@ export function moveCard(
   const positions = new Map(nextCards.map((item, position) => [item.id, position]));
   const changedList = card.listId !== toListId;
   const toList = data.lists.find((item) => item.id === toListId);
-  // Done 是终态；完成后继续工作请新建卡片，避免周报重复计算完成记录。
-  if (changedList && card.completedAt && toList?.role !== "archive" && toList?.role !== "trash" && toList?.role !== "done") {
-    return data;
-  }
   const now = new Date().toISOString();
   const entersDone = changedList && toList?.role === "done";
   const entersActive = changedList && !["archive", "trash", "done"].includes(toList?.role ?? "") && card.startedAt === null;
